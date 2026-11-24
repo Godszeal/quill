@@ -42,6 +42,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     const mode = body.mode || inferMode(prompt);
+    if (mode === "research") {
+      const sources = await harvestSources(prompt, 24);
+      await addMessage(params.id, {
+        id: nid(),
+        role: "assistant",
+        kind: "sources",
+        content: `Latest journal harvest for “${prompt}”: ${sources.length} papers from OpenAlex and Crossref.`,
+        createdAt: nowIso(),
+        meta: { sources },
+      });
+      return NextResponse.json({ ok: true, mode });
+    }
+
     if (mode === "chat") {
       await addMessage(params.id, {
         id: nid(),
@@ -53,7 +66,46 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ ok: true, mode });
     }
 
-    return NextResponse.json({ ok: true, mode, id: params.id });
+    const encoder = new TextEncoder();
+    const project = createProjectDraft({
+      chatId: params.id,
+      topic: prompt,
+      documentType: body.documentType || "undergraduate",
+      citationStyle: body.citationStyle || "apa",
+      targetPages: clampPages(body.targetPages),
+      authorName: body.authorName || "Author",
+      institution: body.institution || "Institution",
+    });
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (payload: unknown) => {
+          controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
+        };
+        try {
+          send({ type: "start", projectId: project.id });
+          await runPipeline(project, async (next, message) => {
+            send({
+              type: "tick",
+              project: slim(next),
+              message,
+            });
+          });
+          send({ type: "done", project: slim(project) });
+        } catch (error) {
+          send({ type: "error", error: error instanceof Error ? error.message : "Failed" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
@@ -67,6 +119,39 @@ function inferMode(prompt: string): Body["mode"] {
   if (/^(help|hi|hello|what can you do|how does this work)\b/.test(q)) return "chat";
   if (/\b(find|search|latest journals?|papers? only|harvest)\b/.test(q) && q.length < 180) return "research";
   return "write";
+}
+
+function clampPages(pages?: number) {
+  const n = Number(pages) || 40;
+  return Math.min(160, Math.max(12, Math.round(n)));
+}
+
+function slim(project: ReturnType<typeof createProjectDraft>) {
+  return {
+    id: project.id,
+    status: project.status,
+    steps: project.steps,
+    commands: project.commands.slice(-8),
+    outline: project.outline,
+    sources: project.sources.slice(0, 12),
+    files: project.files,
+    wordCount: project.wordCount,
+    pageEstimate: project.pageEstimate,
+    currentChapterIndex: project.currentChapterIndex,
+    chapters: project.chapters.map((c) => ({
+      id: c.id,
+      number: c.number,
+      title: c.title,
+      status: c.status,
+      wordCount: c.wordCount,
+      pageEstimate: c.pageEstimate,
+    })),
+    topic: project.topic,
+    documentType: project.documentType,
+    citationStyle: project.citationStyle,
+    targetPages: project.targetPages,
+    error: project.error,
+  };
 }
 
 function helpText() {

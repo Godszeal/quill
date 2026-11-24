@@ -5,6 +5,8 @@ import type { Chat, ChatMessage, Project, ProjectFile } from "./types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const FILE_DIR = path.join(DATA_DIR, "files");
+const TMP_DIR = "/tmp/quill-data";
+const TMP_FILE_DIR = path.join(TMP_DIR, "files");
 
 type Collections = {
   chats: Chat[];
@@ -21,6 +23,7 @@ const emptyStore = (): Collections => ({
 let mongoClient: MongoClient | null = null;
 let mongoDb: Db | null = null;
 let fileCache: Collections | null = null;
+let useInMemoryFallback = false;
 
 function mongoUri() {
   return process.env.MONGODB_URI || "";
@@ -53,21 +56,43 @@ function stripMongo<T>(doc: (T & { _id?: unknown }) | null): T | null {
 }
 
 async function ensureFileStore() {
-  await mkdir(FILE_DIR, { recursive: true });
-  const storePath = path.join(DATA_DIR, "store.json");
+  if (useInMemoryFallback) {
+    if (!fileCache) fileCache = emptyStore();
+    return;
+  }
+  const dir = process.env.VERCEL ? TMP_DIR : DATA_DIR;
+  const fileDir = process.env.VERCEL ? TMP_FILE_DIR : FILE_DIR;
+  try {
+    await mkdir(dir, { recursive: true });
+    await mkdir(fileDir, { recursive: true });
+  } catch {
+    useInMemoryFallback = true;
+    if (!fileCache) fileCache = emptyStore();
+    return;
+  }
+  const storePath = path.join(dir, "store.json");
   try {
     const raw = await readFile(storePath, "utf8");
     fileCache = JSON.parse(raw) as Collections;
   } catch {
     fileCache = emptyStore();
-    await writeFile(storePath, JSON.stringify(fileCache, null, 2));
+    try {
+      await writeFile(storePath, JSON.stringify(fileCache, null, 2));
+    } catch {
+      useInMemoryFallback = true;
+    }
   }
 }
 
 async function persistFileStore() {
-  if (!fileCache) return;
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(path.join(DATA_DIR, "store.json"), JSON.stringify(fileCache, null, 2));
+  if (!fileCache || useInMemoryFallback) return;
+  const dir = process.env.VERCEL ? TMP_DIR : DATA_DIR;
+  try {
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "store.json"), JSON.stringify(fileCache, null, 2));
+  } catch {
+    useInMemoryFallback = true;
+  }
 }
 
 export function usingMongo() {
@@ -177,8 +202,14 @@ export async function saveBinaryFile(file: ProjectFile, buffer: Buffer) {
     });
     return;
   }
-  await mkdir(FILE_DIR, { recursive: true });
-  await writeFile(path.join(FILE_DIR, file.id), buffer);
+  await ensureFileStore();
+  const fileDir = process.env.VERCEL ? TMP_FILE_DIR : FILE_DIR;
+  try {
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(path.join(fileDir, file.id), buffer);
+  } catch {
+    // File system is read-only; file export not available in this environment
+  }
 }
 
 export async function readBinaryFile(fileId: string): Promise<Buffer | null> {
@@ -197,7 +228,8 @@ export async function readBinaryFile(fileId: string): Promise<Buffer | null> {
     return Buffer.concat(chunks);
   }
   try {
-    return await readFile(path.join(FILE_DIR, fileId));
+    const fileDir = process.env.VERCEL ? TMP_FILE_DIR : FILE_DIR;
+    return await readFile(path.join(fileDir, fileId));
   } catch {
     return null;
   }

@@ -1,11 +1,13 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BookMarked,
   ChevronRight,
   EllipsisVertical,
   Loader2,
+  LogOut,
   Menu,
   Plus,
   Search,
@@ -17,7 +19,7 @@ import {
 import { CITATION_STYLES, DOCUMENT_TYPES, PAGE_OPTIONS } from "@/lib/types";
 import type { Chat, ChatMessage, CitationStyle, DocumentType, Project } from "@/lib/types";
 import { SelectField } from "./SelectField";
-import { RichText } from "./RichText";
+import { MarkdownText } from "./MarkdownText";
 import { CommandCard, extraFor } from "./MessageCards";
 
 type SlimProject = Pick<
@@ -51,11 +53,17 @@ export function Studio() {
   const [targetPages, setTargetPages] = useState("40");
   const [authorName, setAuthorName] = useState("");
   const [institution, setInstitution] = useState("");
-  const [mode, setMode] = useState<"write" | "research">("write");
-  const scroller = useRef<HTMLDivElement>(null);
-  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
-  const [typingChars, setTypingChars] = useState(0);
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+const [mode, setMode] = useState<"write" | "research">("write");
+const scroller = useRef<HTMLDivElement>(null);
+const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+const [typingChars, setTypingChars] = useState(0);
+const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+const router = useRouter();
+
+const handleSignout = async () => {
+  await fetch("/api/auth/signout", { method: "POST" });
+  router.replace("/auth/signin");
+};
 
   const loadChats = async () => {
     const res = await fetch("/api/chats");
@@ -190,13 +198,13 @@ export function Studio() {
       await loadChats();
     } finally {
       setBusy(false);
-      if (id)       await openChat(id);
+      if (id) await openChat(id);
     }
   };
 
   return (
     <div className="flex h-[100dvh] bg-[#fafafa] text-[#181818]">
-      {/* Sidebar */}
+      {/* Sidebar - Desktop */}
       <aside
         className={`hidden lg:flex flex-col w-72 border-r border-[#e5e5e5] bg-white z-20 transition-all duration-300 ${
           sidebar ? "" : "-translate-x-full lg:translate-x-0"
@@ -284,20 +292,20 @@ export function Studio() {
       )}
 
       {/* Main */}
-      <main className="flex-1 flex flex-col relative">
-        <header className="h-16 border-b border-[#e5e5e5] bg-white/80 backdrop-blur flex items-center justify-between px-6 shrink-0 z-10">
-          <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 text-[#666] hover:text-[#181818]" onClick={() => setSidebar(!sidebar)}>
+      <main className="flex-1 flex flex-col relative min-w-0">
+        <header className="h-16 border-b border-[#e5e5e5] bg-white/80 backdrop-blur flex items-center justify-between px-4 sm:px-6 shrink-0 z-10">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <button className="lg:hidden p-2 text-[#666] hover:text-[#181818] mr-2" onClick={() => setSidebar(!sidebar)}>
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex flex-col">
-              <p className="text-sm font-semibold truncate max-w-[400px]">{project?.topic || "Start a new manuscript"}</p>
-              <p className="text-[11px] text-[#666] truncate max-w-[400px]">
+            <div className="flex flex-col min-w-0">
+              <p className="text-sm font-semibold truncate">{project?.topic || "Start a new manuscript"}</p>
+              <p className="text-[11px] text-[#666] truncate">
                 {busy ? "Writing in progress…" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Long-form research writing agent"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setSettingsOpen(!settingsOpen)}
               className="p-2 rounded-full text-[#666] hover:bg-[#f2f2f2] hover:text-[#181818] transition-colors"
@@ -305,38 +313,48 @@ export function Studio() {
             >
               <EllipsisVertical className="w-5 h-5" />
             </button>
+            <button
+              onClick={handleSignout}
+              className="p-2 rounded-full text-[#666] hover:bg-[#fef2f2] hover:text-[#ef4444] transition-colors"
+              aria-label="Sign out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 
         {/* Chat area */}
-        <div ref={scroller} className="flex-1 overflow-y-auto p-6 md:p-8">
+        <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
           <div className="mx-auto max-w-3xl w-full">
             {!messages.length && !busy ? (
               <EmptyState onPick={(t) => submit(undefined, t)} />
             ) : (
               <div className="space-y-6">
                 {messages.map((m) => (
-                  <article key={m.id} className="flex gap-4">
+                  <article key={m.id} className="flex gap-3 sm:gap-4">
                     {m.role === "user" ? (
                       <>
-                        <div className="hidden md:block w-8 h-8 rounded-full bg-[#f2f2f2] flex items-center justify-center">
-                          <span className="text-[10px] text-[#666]">U</span>
+                        <div className="hidden sm:block w-7 h-7 rounded-full bg-[#f2f2f2] flex items-center justify-center shrink-0">
+                          <span className="text-[9px] text-[#666]">U</span>
                         </div>
-                        <div className="ml-auto max-w-[85%]">
-                          <div className="rounded-2xl rounded-bl-none bg-[#f2f2f2] p-4 text-sm leading-relaxed text-[#181818]">
+                        <div className="ml-auto max-w-[90%] sm:max-w-[85%]">
+                          <div className="rounded-2xl rounded-bl-none bg-[#f2f2f2] p-3 sm:p-4 text-sm sm:text-base leading-relaxed text-[#181818] whitespace-pre-wrap break-words">
                             {m.content}
                           </div>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center shrink-0">
-                          <span className="text-[10px] font-bold text-white">Q</span>
+                        <div className="w-7 h-7 rounded-full bg-[#181818] flex items-center justify-center shrink-0 sm:w-8 sm:h-8">
+                          <span className="text-[9px] sm:text-[10px] font-bold text-white">Q</span>
                         </div>
-                        <div className="max-w-[90%]">
+                        <div className="max-w-[92%] sm:max-w-[90%]">
                           {m.kind !== "plan" ? (
-                            <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
-                              <TypingText text={m.content} chars={typingMessageId === m.id ? typingChars : m.content.length} />
+                            <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-3 sm:p-4">
+                              <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} />
+                              {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
+                                <span className="animate-pulse inline-block w-1 h-[1em] bg-[#181818] ml-0.5" />
+                              )}
                             </div>
                           ) : null}
                           {extraFor(m)}
@@ -346,15 +364,15 @@ export function Studio() {
                   </article>
                 ))}
                 {project && busy ? (
-                  <article className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-white">Q</span>
+                  <article className="flex gap-3 sm:gap-4">
+                    <div className="w-7 h-7 rounded-full bg-[#181818] flex items-center justify-center shrink-0 sm:w-8 sm:h-8">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-white">Q</span>
                     </div>
-                    <div className="max-w-[90%]">
-                      <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
-                        <div className="flex items-center gap-2 mb-1">
+                    <div className="max-w-[92%] sm:max-w-[90%]">
+                      <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-3 sm:p-4">
+                        <div className="flex items-center gap-2 mb-3">
                           <Loader2 className="w-3 h-3 animate-spin text-[#181818]" />
-                          <span className="text-xs font-medium text-[#181818]">
+                          <span className="text-xs sm:text-sm font-medium text-[#181818]">
                             {project.steps.find((s) => s.status === "running")?.label || "Writing in progress…"}
                           </span>
                         </div>
@@ -364,7 +382,7 @@ export function Studio() {
                             style={{ width: `${Math.round(((project.steps.filter((s) => s.status === "done").length) / Math.max(project.steps.length, 1)) * 100)}%` }}
                           />
                         </div>
-                        <ol className="grid gap-2 sm:grid-cols-2 text-[10px]">
+                        <ol className="grid gap-2 sm:grid-cols-2 text-[10px] sm:text-xs">
                           {project.steps.map((s) => {
                             const isDone = s.status === "done";
                             const isRunning = s.status === "running";
@@ -393,14 +411,14 @@ export function Studio() {
         {/* Settings panel */}
         {settingsOpen && (
           <div className="absolute inset-0 z-50 bg-[#fafafa] flex flex-col">
-            <div className="h-16 border-b border-[#e5e5e5] flex items-center justify-between px-6">
+            <div className="h-16 border-b border-[#e5e5e5] flex items-center justify-between px-4 sm:px-6">
               <button onClick={() => setSettingsOpen(false)} className="text-[#666] hover:text-[#181818]">
                 Back
               </button>
               <span className="text-sm font-semibold">Settings</span>
               <div className="w-8" />
             </div>
-            <div className="p-6 space-y-6 overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Document type</p>
                 <SelectField
@@ -472,7 +490,7 @@ export function Studio() {
         )}
 
         {/* Composer */}
-        <footer className="h-auto p-4 md:p-6 border-t border-[#e5e5e5] bg-white shrink-0 z-10">
+        <footer className="h-auto p-4 sm:p-6 border-t border-[#e5e5e5] bg-white shrink-0 z-10">
           <div className="mx-auto max-w-3xl w-full">
             <div className="flex items-end gap-3">
               <textarea
@@ -496,7 +514,7 @@ export function Studio() {
               <button
                 disabled={busy || !prompt.trim()}
                 onClick={submit}
-                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                   busy || !prompt.trim()
                     ? "bg-[#e5e5e5] text-[#999]"
                     : "bg-[#181818] text-white hover:bg-[#333]"
@@ -517,19 +535,6 @@ export function Studio() {
   );
 }
 
-function TypingText({ text, chars }: { text: string; chars: number }) {
-  const visible = text.slice(0, chars);
-  const done = chars >= text.length;
-  return (
-    <div className="relative">
-      {visible}
-      {!done && (
-        <span className="animate-pulse inline-block w-1 h-[1em] bg-[#181818] ml-0.5" />
-      )}
-    </div>
-  );
-}
-
 function EmptyState({ onPick }: { onPick: (topic: string) => void }) {
   const samples = [
     "The role of large language models in academic research integrity",
@@ -538,15 +543,15 @@ function EmptyState({ onPick }: { onPick: (topic: string) => void }) {
     "Digital public infrastructure and financial inclusion in emerging markets",
   ];
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-12">
-      <div className="w-16 h-16 rounded-full bg-[#f2f2f2] flex items-center justify-center mb-6">
-        <Sparkles className="w-8 h-8 text-[#181818]" />
+    <div className="flex flex-col items-center justify-center h-full text-center p-6 sm:p-12">
+      <div className="w-16 h-16 rounded-full bg-[#f2f2f2] flex items-center justify-center mb-4 sm:mb-6">
+        <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-[#181818]" />
       </div>
-      <h1 className="text-2xl font-semibold text-[#181818] mb-2">Quill</h1>
-      <p className="text-[#666] mb-8 max-w-md px-4">
+      <h1 className="text-2xl sm:text-3xl font-semibold text-[#181818] mb-2">Quill</h1>
+      <p className="text-[#666] mb-6 sm:mb-8 max-w-md sm:max-w-lg px-4 sm:px-0">
         Write 20–150 page theses, projects, and literature reviews with live journal harvest, consistent structure, and PDF/DOCX export.
       </p>
-      <div className="space-y-3 w-full max-w-md px-4">
+      <div className="space-y-3 w-full max-w-md sm:max-w-lg px-4 sm:px-0">
         {samples.map((s) => (
           <button
             key={s}

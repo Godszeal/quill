@@ -95,6 +95,8 @@ async function persistFileStore() {
   }
 }
 
+export { connectMongo };
+
 export function usingMongo() {
   return Boolean(mongoUri());
 }

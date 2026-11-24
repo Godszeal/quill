@@ -130,6 +130,7 @@ export interface Chat {
   createdAt: string;
   updatedAt: string;
   projectId?: string;
+  userId?: string;
 }
 
 export interface Project {

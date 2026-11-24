@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { getProject, readBinaryFile } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAuth(req.headers);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
   const buffer = await readBinaryFile(params.id);
   if (!buffer) return NextResponse.json({ error: "File not found" }, { status: 404 });
 

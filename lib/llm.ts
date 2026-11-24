@@ -79,3 +79,31 @@ export async function llmWriteChapter(params: {
 export function resetLlmClient() {
   client = null;
 }
+
+export async function llmNameChat(prompt: string): Promise<string> {
+  const c = getClient();
+  if (!c) return prompt.slice(0, 72);
+  try {
+    const completion = await c.chat.completions.create({
+      model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "You are a helpful assistant that generates short, descriptive chat titles.",
+            "Given the user's first message below, produce a concise title (max 6 words, no quotes, no punctuation at the end).",
+            "Return ONLY the title, nothing else.",
+            "",
+            `User message: ${prompt}`,
+          ].join("\n"),
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 20,
+    });
+    const title = completion.choices[0]?.message?.content || "";
+    return title.trim().slice(0, 72) || prompt.slice(0, 72);
+  } catch {
+    return prompt.slice(0, 72);
+  }
+}

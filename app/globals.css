@@ -3,11 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --ink: #07111f;
-  --panel: rgba(10, 18, 32, 0.78);
-  --line: rgba(148, 163, 184, 0.16);
-  --gold: #d6b36a;
-  --mint: #7dd3c7;
+  --ink: #000000;
+  --panel: rgba(0, 0, 0, 0.05);
+  --line: #e5e7eb;
+  --paper: #ffffff;
 }
 
 * {
@@ -21,11 +20,8 @@ body {
 
 body {
   margin: 0;
-  color: #e8eef7;
-  background:
-    radial-gradient(1200px 700px at 10% -10%, rgba(214, 179, 106, 0.16), transparent 55%),
-    radial-gradient(900px 600px at 110% 10%, rgba(125, 211, 199, 0.12), transparent 50%),
-    linear-gradient(180deg, #070d18 0%, #0b1424 48%, #08101c 100%);
+  color: #111827;
+  background: #ffffff;
   font-feature-settings: "ss01" on, "cv11" on;
 }
 
@@ -35,7 +31,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.28);
+  background: #d1d5db;
   border-radius: 99px;
 }
 
@@ -46,7 +42,7 @@ body {
 }
 
 .prose-chat a {
-  color: #7dd3c7;
+  color: #2563eb;
   text-decoration: underline;
   text-underline-offset: 3px;
 }

@@ -15,15 +15,15 @@ export function SelectField({
 }) {
   return (
     <label className="block min-w-0">
-      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">{label}</span>
+      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</span>
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none rounded-xl border border-white/10 bg-white/5 py-2.5 pl-3 pr-9 text-sm text-slate-100 outline-none transition focus:border-gold/50"
+          className="w-full appearance-none rounded-xl border border-border bg-paper py-2.5 pl-3 pr-9 text-sm text-ink outline-none transition focus:border-ink"
         >
           {options.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-slate-900 text-white">
+            <option key={opt.value} value={opt.value} className="bg-paper text-ink">
               {opt.label}
             </option>
           ))}

@@ -149,20 +149,20 @@ export function Studio() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden bg-paper">
       {sidebar ? (
-        <button className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebar(false)} aria-label="Close sidebar" />
+        <button className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setSidebar(false)} aria-label="Close sidebar" />
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-80 flex-col border-r border-white/10 bg-[#08111d] p-4 transition-transform lg:static lg:w-72 lg:max-w-none lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-80 flex-col border-r border-border bg-paper p-4 transition-transform lg:static lg:w-72 lg:max-w-none lg:translate-x-0 ${
           sidebar ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-serif text-xl tracking-tight text-white">Quill</p>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-gold">Research writing agent</p>
+            <p className="font-serif text-xl tracking-tight text-ink">Quill</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Research writing agent</p>
           </div>
           <button className="rounded-lg p-1 text-slate-400 lg:hidden" onClick={() => setSidebar(false)}>
             <X className="h-5 w-5" />
@@ -170,7 +170,7 @@ export function Studio() {
         </div>
         <button
           onClick={newChat}
-          className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-3 py-2.5 text-sm font-medium text-ink hover:brightness-110"
+          className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-paper px-3 py-2.5 text-sm font-medium text-ink hover:bg-gray-50"
         >
           <Plus className="h-4 w-4" /> New chat
         </button>
@@ -180,29 +180,29 @@ export function Studio() {
               key={c.id}
               onClick={() => openChat(c.id)}
               className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                c.id === chatId ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                c.id === chatId ? "bg-gray-100 text-ink" : "text-slate-600 hover:bg-gray-50 hover:text-ink"
               }`}
             >
               <span className="line-clamp-2">{c.title}</span>
             </button>
           ))}
         </div>
-        <p className="pt-3 text-[11px] leading-5 text-slate-500">MongoDB persistence · OpenAlex + Crossref harvest · PDF/DOCX export</p>
+        <p className="pt-3 text-[11px] leading-5 text-slate-400">MongoDB persistence · OpenAlex + Crossref harvest · PDF/DOCX export</p>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-white/10 px-3 py-3 sm:px-5">
-          <button className="rounded-lg p-2 text-slate-300 lg:hidden" onClick={() => setSidebar(true)} aria-label="Open chats">
+        <header className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-5 bg-paper">
+          <button className="rounded-lg p-2 text-slate-400 lg:hidden" onClick={() => setSidebar(true)} aria-label="Open chats">
             <Menu className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-white">{project?.topic || "Start a manuscript"}</p>
-            <p className="truncate text-xs text-slate-400">
+            <p className="truncate font-medium text-ink">{project?.topic || "Start a manuscript"}</p>
+            <p className="truncate text-xs text-slate-500">
               {busy ? "Writing in progress" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Consistent long-form research agent"}
             </p>
           </div>
           {project ? (
-            <div className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 sm:block">
+            <div className="hidden rounded-full border border-border px-3 py-1 text-xs text-slate-600 sm:block">
               {project.wordCount.toLocaleString()} words
             </div>
           ) : null}
@@ -216,9 +216,9 @@ export function Studio() {
               messages.map((m) => (
                 <article key={m.id} className={`rise ${m.role === "user" ? "ml-auto max-w-[92%] sm:max-w-[80%]" : "max-w-[96%]"}`}>
                   {m.role === "user" ? (
-                    <div className="rounded-2xl rounded-br-md bg-gold px-4 py-3 text-sm leading-6 text-ink">{m.content}</div>
+                    <div className="rounded-2xl rounded-br-md border border-border bg-gray-100 px-4 py-3 text-sm leading-6 text-ink">{m.content}</div>
                   ) : (
-                    <div className="rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div className="rounded-2xl rounded-bl-md border border-border bg-gray-50 px-4 py-3">
                       {m.kind !== "plan" ? <RichText text={m.content} /> : null}
                       {extraFor(m)}
                     </div>
@@ -227,14 +227,14 @@ export function Studio() {
               ))
             )}
             {project && busy ? (
-              <div className="rise rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-sm text-slate-300">Running the writing pipeline…</p>
+              <div className="rise rounded-2xl border border-border bg-gray-50 p-4">
+                <p className="text-sm text-slate-600">Running the writing pipeline…</p>
                 <ol className="mt-3 grid gap-2 sm:grid-cols-2">
                   {project.steps.map((s) => (
-                    <li key={s.id} className="flex items-center gap-2 text-xs text-slate-400">
+                    <li key={s.id} className="flex items-center gap-2 text-xs text-slate-500">
                       <span
                         className={`h-2 w-2 rounded-full ${
-                          s.status === "done" ? "bg-mint" : s.status === "running" ? "bg-gold" : "bg-white/20"
+                          s.status === "done" ? "bg-ink" : s.status === "running" ? "bg-slate-400" : "bg-gray-200"
                         }`}
                       />
                       {s.label}
@@ -247,7 +247,7 @@ export function Studio() {
           </div>
         </div>
 
-        <form onSubmit={submit} className="border-t border-white/10 bg-[#08111d]/80 p-3 sm:p-4">
+        <form onSubmit={submit} className="border-t border-border bg-paper p-3 sm:p-4">
           <div className="mx-auto max-w-3xl">
             <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <SelectField
@@ -269,19 +269,19 @@ export function Studio() {
                 options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
               />
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">Mode</span>
-                <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1">
+                <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Mode</span>
+                <div className="grid grid-cols-2 rounded-xl border border-border bg-paper p-1">
                   <button
                     type="button"
                     onClick={() => setMode("write")}
-                    className={`rounded-lg py-1.5 text-xs ${mode === "write" ? "bg-gold text-ink" : "text-slate-300"}`}
+                    className={`rounded-lg py-1.5 text-xs ${mode === "write" ? "bg-ink text-paper" : "text-slate-600 hover:bg-gray-50"}`}
                   >
                     Write
                   </button>
                   <button
                     type="button"
                     onClick={() => setMode("research")}
-                    className={`rounded-lg py-1.5 text-xs ${mode === "research" ? "bg-gold text-ink" : "text-slate-300"}`}
+                    className={`rounded-lg py-1.5 text-xs ${mode === "research" ? "bg-ink text-paper" : "text-slate-600 hover:bg-gray-50"}`}
                   >
                     Journals
                   </button>
@@ -293,22 +293,22 @@ export function Studio() {
                 value={authorName}
                 onChange={(e) => setAuthorName(e.target.value)}
                 placeholder="Author name"
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none placeholder:text-slate-500 focus:border-gold/50"
+                className="rounded-xl border border-border bg-paper px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:border-ink"
               />
               <input
                 value={institution}
                 onChange={(e) => setInstitution(e.target.value)}
                 placeholder="Institution / university"
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none placeholder:text-slate-500 focus:border-gold/50"
+                className="rounded-xl border border-border bg-paper px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:border-ink"
               />
             </div>
-            <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/5 p-2">
+            <div className="flex items-end gap-2 rounded-2xl border border-border bg-paper p-2">
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={2}
                 placeholder="Topic, e.g. Climate-smart agriculture and smallholder livelihoods in West Africa"
-                className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"
+                className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-400"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -318,7 +318,7 @@ export function Studio() {
               />
               <button
                 disabled={busy || !prompt.trim()}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gold text-ink disabled:opacity-40"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink text-paper disabled:opacity-40"
                 aria-label="Send"
               >
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === "research" ? <Search className="h-5 w-5" /> : <Send className="h-5 w-5" />}
@@ -339,12 +339,12 @@ function Welcome({ onPick }: { onPick: (topic: string) => void }) {
     "Digital public infrastructure and financial inclusion in emerging markets",
   ];
   return (
-    <div className="rise rounded-3xl border border-white/10 bg-white/[0.04] p-5 sm:p-8">
-      <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs text-gold">
+    <div className="rise rounded-3xl border border-border bg-paper p-5 sm:p-8">
+      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-gray-50 px-3 py-1 text-xs text-slate-600">
         <Sparkles className="h-3.5 w-3.5" /> 100+ page consistent manuscripts
       </div>
-      <h1 className="mt-4 font-serif text-3xl leading-tight text-white sm:text-4xl">Write the project. Cite the latest journals. Export the file.</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+      <h1 className="mt-4 font-serif text-3xl leading-tight text-ink sm:text-4xl">Write the project. Cite the latest journals. Export the file.</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
         Quill harvests OpenAlex and Crossref, locks a stable outline, writes chapter by chapter, and delivers PDF plus DOCX. New chats keep each manuscript separate.
       </p>
       <div className="mt-6 grid gap-2 sm:grid-cols-2">
@@ -352,9 +352,9 @@ function Welcome({ onPick }: { onPick: (topic: string) => void }) {
           <button
             key={s}
             onClick={() => onPick(s)}
-            className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left text-sm leading-6 text-slate-200 hover:border-gold/40"
+            className="rounded-2xl border border-border bg-paper p-4 text-left text-sm leading-6 text-slate-700 hover:border-slate-300 hover:bg-gray-50"
           >
-            <BookMarked className="mb-2 h-4 w-4 text-gold" />
+            <BookMarked className="mb-2 h-4 w-4 text-slate-600" />
             {s}
           </button>
         ))}

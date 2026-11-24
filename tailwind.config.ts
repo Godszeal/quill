@@ -13,9 +13,10 @@ const config: Config = {
         serif: ["var(--font-serif)", "Georgia", "serif"],
       },
       colors: {
-        ink: "#07111f",
-        gold: "#d6b36a",
-        mint: "#7dd3c7",
+        ink: "#000000",
+        paper: "#ffffff",
+        slate: "#6b7280",
+        border: "#e5e7eb",
       },
     },
   },

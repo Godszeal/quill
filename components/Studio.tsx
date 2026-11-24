@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   BookMarked,
+  ChevronRight,
   EllipsisVertical,
   Loader2,
   Menu,
@@ -52,6 +53,9 @@ export function Studio() {
   const [institution, setInstitution] = useState("");
   const [mode, setMode] = useState<"write" | "research">("write");
   const scroller = useRef<HTMLDivElement>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [typingChars, setTypingChars] = useState(0);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadChats = async () => {
     const res = await fetch("/api/chats");
@@ -104,6 +108,27 @@ export function Studio() {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [messages, project, busy]);
 
+  useEffect(() => {
+    if (!typingMessageId) {
+      setTypingChars(0);
+      return;
+    }
+    const msg = messages.find((m) => m.id === typingMessageId);
+    if (!msg) return;
+    const target = msg.content.length;
+    if (typingChars >= target) return;
+    typingTimer.current = setTimeout(() => setTypingChars((c) => Math.min(c + 3, target)), 20);
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, [typingMessageId, typingChars, messages]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, []);
+
   const submit = async (event?: FormEvent, preset?: string) => {
     event?.preventDefault();
     const text = (preset || prompt).trim();
@@ -150,7 +175,13 @@ export function Studio() {
             if (!line.trim()) continue;
             const evt = JSON.parse(line);
             if (evt.project) setProject(evt.project);
-            if (evt.message) setMessages((m) => [...m, evt.message]);
+            if (evt.message) {
+              setMessages((m) => [...m, evt.message]);
+              if (evt.message.role === "assistant" && evt.message.kind === "text") {
+                setTypingMessageId(evt.message.id);
+                setTypingChars(0);
+              }
+            }
           }
         }
       } else {
@@ -305,7 +336,7 @@ export function Studio() {
                         <div className="max-w-[90%]">
                           {m.kind !== "plan" ? (
                             <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
-                              <RichText text={m.content} />
+                              <TypingText text={m.content} chars={typingMessageId === m.id ? typingChars : m.content.length} />
                             </div>
                           ) : null}
                           {extraFor(m)}
@@ -321,18 +352,33 @@ export function Studio() {
                     </div>
                     <div className="max-w-[90%]">
                       <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
-                        <p className="text-sm text-[#181818]">Running the writing pipeline…</p>
-                        <ol className="mt-4 grid gap-2 sm:grid-cols-2 text-xs">
-                          {project.steps.map((s) => (
-                            <li key={s.id} className="flex items-center gap-2 text-[#666]">
-                              <span
-                                className={`h-2 w-2 rounded-full ${
-                                  s.status === "done" ? "bg-[#181818]" : s.status === "running" ? "bg-[#d6b36a]" : "bg-[#e5e5e5]"
-                                }`}
-                              />
-                              {s.label}
-                            </li>
-                          ))}
+                        <div className="flex items-center gap-2 mb-1">
+                          <Loader2 className="w-3 h-3 animate-spin text-[#181818]" />
+                          <span className="text-xs font-medium text-[#181818]">
+                            {project.steps.find((s) => s.status === "running")?.label || "Writing in progress…"}
+                          </span>
+                        </div>
+                        <div className="w-full bg-[#f2f2f2] rounded-full h-1.5 mb-3">
+                          <div
+                            className="bg-[#181818] h-1.5 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.round(((project.steps.filter((s) => s.status === "done").length) / Math.max(project.steps.length, 1)) * 100)}%` }}
+                          />
+                        </div>
+                        <ol className="grid gap-2 sm:grid-cols-2 text-[10px]">
+                          {project.steps.map((s) => {
+                            const isDone = s.status === "done";
+                            const isRunning = s.status === "running";
+                            const liClass = `flex items-center gap-2 px-2 py-1.5 rounded-lg border ${isRunning ? "border-[#d6b36a] bg-[#fdf6e3]" : isDone ? "bg-[#f2f2f2]" : "border-transparent bg-transparent"}`;
+                            const dotClass = `h-2 w-2 rounded-full shrink-0 ${isDone ? "bg-[#181818]" : isRunning ? "bg-[#d6b36a]" : "bg-[#e5e5e5]"}`;
+                            const labelClass = `text-xs font-medium ${isDone ? "text-[#181818]" : isRunning ? "text-[#92400e]" : "text-[#888]"}`;
+                            return (
+                              <li key={s.id} className={liClass}>
+                                <span className={dotClass} />
+                                <span className={labelClass}>{s.label}</span>
+                                {isDone && <ChevronRight className="w-3 h-3 ml-auto text-[#ccc]" />}
+                              </li>
+                            );
+                          })}
                         </ol>
                         <CommandCard commands={project.commands} />
                       </div>
@@ -467,6 +513,19 @@ export function Studio() {
           </div>
         </footer>
       </main>
+    </div>
+  );
+}
+
+function TypingText({ text, chars }: { text: string; chars: number }) {
+  const visible = text.slice(0, chars);
+  const done = chars >= text.length;
+  return (
+    <div className="relative">
+      {visible}
+      {!done && (
+        <span className="animate-pulse inline-block w-1 h-[1em] bg-[#181818] ml-0.5" />
+      )}
     </div>
   );
 }

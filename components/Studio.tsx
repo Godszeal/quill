@@ -3,12 +3,14 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   BookMarked,
+  EllipsisVertical,
   Loader2,
   Menu,
   Plus,
   Search,
   Send,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { CITATION_STYLES, DOCUMENT_TYPES, PAGE_OPTIONS } from "@/lib/types";
@@ -41,7 +43,8 @@ export function Studio() {
   const [project, setProject] = useState<SlimProject | null>(null);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
-  const [sidebar, setSidebar] = useState(false);
+  const [sidebar, setSidebar] = useState(typeof window === "undefined" ? true : window.innerWidth < 768);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [documentType, setDocumentType] = useState<DocumentType>("undergraduate");
   const [citationStyle, setCitationStyle] = useState<CitationStyle>("apa");
   const [targetPages, setTargetPages] = useState("40");
@@ -59,7 +62,7 @@ export function Studio() {
 
   const openChat = async (id: string) => {
     setChatId(id);
-    setSidebar(false);
+    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
     const res = await fetch(`/api/chats/${id}`);
     const data = await res.json();
     setMessages(data.messages || []);
@@ -73,7 +76,19 @@ export function Studio() {
     setMessages([]);
     setProject(null);
     setChatId(data.chat.id);
-    setSidebar(false);
+    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
+    setSettingsOpen(false);
+  };
+
+  const deleteChat = async (id: string) => {
+    if (!window.confirm("Delete this chat?")) return;
+    await fetch(`/api/chats/${id}`, { method: "DELETE" });
+    await loadChats();
+    if (chatId === id) {
+      const list = chats.filter((c) => c.id !== id);
+      if (list[0]) await openChat(list[0].id);
+      else await newChat();
+    }
   };
 
   useEffect(() => {
@@ -149,166 +164,282 @@ export function Studio() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-paper">
-      {sidebar ? (
-        <button className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setSidebar(false)} aria-label="Close sidebar" />
-      ) : null}
-
+    <div className="flex h-[100dvh] bg-[#fafafa] text-[#181818]">
+      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-80 flex-col border-r border-border bg-paper p-4 transition-transform lg:static lg:w-72 lg:max-w-none lg:translate-x-0 ${
-          sidebar ? "translate-x-0" : "-translate-x-full"
+        className={`hidden lg:flex flex-col w-72 border-r border-[#e5e5e5] bg-white z-20 transition-all duration-300 ${
+          sidebar ? "" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-serif text-xl tracking-tight text-ink">Quill</p>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Research writing agent</p>
+        <div className="h-16 flex items-center justify-between px-4 border-b border-[#e5e5e5] bg-white shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center">
+              <span className="text-[10px] font-bold text-white">Q</span>
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Quill</span>
           </div>
-          <button className="rounded-lg p-1 text-slate-400 lg:hidden" onClick={() => setSidebar(false)}>
-            <X className="h-5 w-5" />
-          </button>
         </div>
-        <button
-          onClick={newChat}
-          className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-paper px-3 py-2.5 text-sm font-medium text-ink hover:bg-gray-50"
-        >
-          <Plus className="h-4 w-4" /> New chat
-        </button>
-        <div className="mt-5 flex-1 space-y-1 overflow-y-auto pr-1">
-          {chats.map((c) => (
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex items-center justify-between px-2">
             <button
-              key={c.id}
-              onClick={() => openChat(c.id)}
-              className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                c.id === chatId ? "bg-gray-100 text-ink" : "text-slate-600 hover:bg-gray-50 hover:text-ink"
-              }`}
+              onClick={newChat}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium hover:bg-[#f2f2f2] transition-colors"
             >
-              <span className="line-clamp-2">{c.title}</span>
+              <Plus className="w-4 h-4" /> New chat
             </button>
-          ))}
+          </div>
+
+          <div className="space-y-1">
+            {chats.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openChat(c.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  deleteChat(c.id);
+                }}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                  c.id === chatId
+                    ? "bg-[#f2f2f2] text-[#181818]"
+                    : "text-[#666] hover:bg-[#f2f2f2]"
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{c.title}</p>
+                  <p className="truncate text-[10px] text-[#888] mt-0.5">{new Date(c.updatedAt).toLocaleDateString()}</p>
+                </div>
+                <EllipsisVertical className="w-4 h-4 opacity-0 group-hover:opacity-100 text-[#666]" />
+              </button>
+            ))}
+          </div>
         </div>
-        <p className="pt-3 text-[11px] leading-5 text-slate-400">MongoDB persistence · OpenAlex + Crossref harvest · PDF/DOCX export</p>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-5 bg-paper">
-          <button className="rounded-lg p-2 text-slate-400 lg:hidden" onClick={() => setSidebar(true)} aria-label="Open chats">
-            <Menu className="h-5 w-5" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-ink">{project?.topic || "Start a manuscript"}</p>
-            <p className="truncate text-xs text-slate-500">
-              {busy ? "Writing in progress" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Consistent long-form research agent"}
-            </p>
+      {/* Mobile sidebar overlay */}
+      {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-sm" onClick={() => setSidebar(false)} />
+      )}
+      {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
+        <aside className="lg:hidden fixed left-0 top-0 z-40 w-[85vw] max-w-md h-full bg-white border-r border-[#e5e5e5] shadow-xl transform transition-transform duration-300 flex flex-col">
+          <div className="h-12 flex items-center justify-between px-4 border-b border-[#e5e5e5] shrink-0">
+            <span className="font-semibold text-sm">Chats</span>
+            <button onClick={() => setSidebar(false)} className="text-[#666] hover:text-[#181818]">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          {project ? (
-            <div className="hidden rounded-full border border-border px-3 py-1 text-xs text-slate-600 sm:block">
-              {project.wordCount.toLocaleString()} words
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <button
+              onClick={newChat}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium hover:bg-[#f2f2f2] transition-colors"
+            >
+              <Plus className="w-4 h-4" /> New chat
+            </button>
+            <div className="space-y-1">
+              {chats.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => { openChat(c.id); setSidebar(false); }}
+                  className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                    c.id === chatId ? "bg-[#f2f2f2] text-[#181818]" : "text-[#666] hover:bg-[#f2f2f2]"
+                  }`}
+                >
+                  <p className="truncate text-sm">{c.title}</p>
+                </button>
+              ))}
             </div>
-          ) : null}
+          </div>
+        </aside>
+      )}
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col relative">
+        <header className="h-16 border-b border-[#e5e5e5] bg-white/80 backdrop-blur flex items-center justify-between px-6 shrink-0 z-10">
+          <div className="flex items-center gap-3">
+            <button className="lg:hidden p-2 text-[#666] hover:text-[#181818]" onClick={() => setSidebar(!sidebar)}>
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex flex-col">
+              <p className="text-sm font-semibold truncate max-w-[400px]">{project?.topic || "Start a new manuscript"}</p>
+              <p className="text-[11px] text-[#666] truncate max-w-[400px]">
+                {busy ? "Writing in progress…" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Long-form research writing agent"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              className="p-2 rounded-full text-[#666] hover:bg-[#f2f2f2] hover:text-[#181818] transition-colors"
+              aria-label="Settings"
+            >
+              <EllipsisVertical className="w-5 h-5" />
+            </button>
+          </div>
         </header>
 
-        <div ref={scroller} className="flex-1 overflow-y-auto px-3 py-5 sm:px-6">
-          <div className="mx-auto w-full max-w-3xl space-y-5">
-            {!messages.length ? (
-              <Welcome onPick={(t) => submit(undefined, t)} />
+        {/* Chat area */}
+        <div ref={scroller} className="flex-1 overflow-y-auto p-6 md:p-8">
+          <div className="mx-auto max-w-3xl w-full">
+            {!messages.length && !busy ? (
+              <EmptyState onPick={(t) => submit(undefined, t)} />
             ) : (
-              messages.map((m) => (
-                <article key={m.id} className={`rise ${m.role === "user" ? "ml-auto max-w-[92%] sm:max-w-[80%]" : "max-w-[96%]"}`}>
-                  {m.role === "user" ? (
-                    <div className="rounded-2xl rounded-br-md border border-border bg-gray-100 px-4 py-3 text-sm leading-6 text-ink">{m.content}</div>
-                  ) : (
-                    <div className="rounded-2xl rounded-bl-md border border-border bg-gray-50 px-4 py-3">
-                      {m.kind !== "plan" ? <RichText text={m.content} /> : null}
-                      {extraFor(m)}
+              <div className="space-y-6">
+                {messages.map((m) => (
+                  <article key={m.id} className="flex gap-4">
+                    {m.role === "user" ? (
+                      <>
+                        <div className="hidden md:block w-8 h-8 rounded-full bg-[#f2f2f2] flex items-center justify-center">
+                          <span className="text-[10px] text-[#666]">U</span>
+                        </div>
+                        <div className="ml-auto max-w-[85%]">
+                          <div className="rounded-2xl rounded-bl-none bg-[#f2f2f2] p-4 text-sm leading-relaxed text-[#181818]">
+                            {m.content}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-white">Q</span>
+                        </div>
+                        <div className="max-w-[90%]">
+                          {m.kind !== "plan" ? (
+                            <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
+                              <RichText text={m.content} />
+                            </div>
+                          ) : null}
+                          {extraFor(m)}
+                        </div>
+                      </>
+                    )}
+                  </article>
+                ))}
+                {project && busy ? (
+                  <article className="flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-white">Q</span>
                     </div>
-                  )}
-                </article>
-              ))
-            )}
-            {project && busy ? (
-              <div className="rise rounded-2xl border border-border bg-gray-50 p-4">
-                <p className="text-sm text-slate-600">Running the writing pipeline…</p>
-                <ol className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {project.steps.map((s) => (
-                    <li key={s.id} className="flex items-center gap-2 text-xs text-slate-500">
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          s.status === "done" ? "bg-ink" : s.status === "running" ? "bg-slate-400" : "bg-gray-200"
-                        }`}
-                      />
-                      {s.label}
-                    </li>
-                  ))}
-                </ol>
-                <CommandCard commands={project.commands} />
+                    <div className="max-w-[90%]">
+                      <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-4">
+                        <p className="text-sm text-[#181818]">Running the writing pipeline…</p>
+                        <ol className="mt-4 grid gap-2 sm:grid-cols-2 text-xs">
+                          {project.steps.map((s) => (
+                            <li key={s.id} className="flex items-center gap-2 text-[#666]">
+                              <span
+                                className={`h-2 w-2 rounded-full ${
+                                  s.status === "done" ? "bg-[#181818]" : s.status === "running" ? "bg-[#d6b36a]" : "bg-[#e5e5e5]"
+                                }`}
+                              />
+                              {s.label}
+                            </li>
+                          ))}
+                        </ol>
+                        <CommandCard commands={project.commands} />
+                      </div>
+                    </div>
+                  </article>
+                ) : null}
               </div>
-            ) : null}
+            )}
           </div>
         </div>
 
-        <form onSubmit={submit} className="border-t border-border bg-paper p-3 sm:p-4">
-          <div className="mx-auto max-w-3xl">
-            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <SelectField
-                label="Document"
-                value={documentType}
-                onChange={(v) => setDocumentType(v as DocumentType)}
-                options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
-              />
-              <SelectField
-                label="Citation"
-                value={citationStyle}
-                onChange={(v) => setCitationStyle(v as CitationStyle)}
-                options={CITATION_STYLES}
-              />
-              <SelectField
-                label="Pages"
-                value={targetPages}
-                onChange={setTargetPages}
-                options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
-              />
-              <label className="block min-w-0">
-                <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Mode</span>
-                <div className="grid grid-cols-2 rounded-xl border border-border bg-paper p-1">
+        {/* Settings panel */}
+        {settingsOpen && (
+          <div className="absolute inset-0 z-50 bg-[#fafafa] flex flex-col">
+            <div className="h-16 border-b border-[#e5e5e5] flex items-center justify-between px-6">
+              <button onClick={() => setSettingsOpen(false)} className="text-[#666] hover:text-[#181818]">
+                Back
+              </button>
+              <span className="text-sm font-semibold">Settings</span>
+              <div className="w-8" />
+            </div>
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Document type</p>
+                <SelectField
+                  label="Type"
+                  value={documentType}
+                  onChange={(v) => setDocumentType(v as DocumentType)}
+                  options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Citation style</p>
+                <SelectField
+                  label="Style"
+                  value={citationStyle}
+                  onChange={(v) => setCitationStyle(v as CitationStyle)}
+                  options={CITATION_STYLES}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Target pages</p>
+                <SelectField
+                  label="Pages"
+                  value={targetPages}
+                  onChange={setTargetPages}
+                  options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Author</p>
+                <input
+                  value={authorName}
+                  onChange={(e) => setAuthorName(e.target.value)}
+                  placeholder="Author name"
+                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#181818] outline-none"
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Institution</p>
+                <input
+                  value={institution}
+                  onChange={(e) => setInstitution(e.target.value)}
+                  placeholder="Institution / university"
+                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#181818] outline-none"
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Mode</p>
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    type="button"
                     onClick={() => setMode("write")}
-                    className={`rounded-lg py-1.5 text-xs ${mode === "write" ? "bg-ink text-paper" : "text-slate-600 hover:bg-gray-50"}`}
+                    className={`rounded-lg py-2 text-sm font-medium transition-colors ${
+                      mode === "write" ? "bg-[#181818] text-white" : "bg-white border border-[#e5e5e5] text-[#666] hover:bg-[#f2f2f2]"
+                    }`}
                   >
                     Write
                   </button>
                   <button
-                    type="button"
                     onClick={() => setMode("research")}
-                    className={`rounded-lg py-1.5 text-xs ${mode === "research" ? "bg-ink text-paper" : "text-slate-600 hover:bg-gray-50"}`}
+                    className={`rounded-lg py-2 text-sm font-medium transition-colors ${
+                      mode === "research" ? "bg-[#181818] text-white" : "bg-white border border-[#e5e5e5] text-[#666] hover:bg-[#f2f2f2]"
+                    }`}
                   >
                     Journals
                   </button>
                 </div>
-              </label>
+              </div>
             </div>
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input
-                value={authorName}
-                onChange={(e) => setAuthorName(e.target.value)}
-                placeholder="Author name"
-                className="rounded-xl border border-border bg-paper px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:border-ink"
-              />
-              <input
-                value={institution}
-                onChange={(e) => setInstitution(e.target.value)}
-                placeholder="Institution / university"
-                className="rounded-xl border border-border bg-paper px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:border-ink"
-              />
-            </div>
-            <div className="flex items-end gap-2 rounded-2xl border border-border bg-paper p-2">
+          </div>
+        )}
+
+        {/* Composer */}
+        <footer className="h-auto p-4 md:p-6 border-t border-[#e5e5e5] bg-white shrink-0 z-10">
+          <div className="mx-auto max-w-3xl w-full">
+            <div className="flex items-end gap-3">
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                rows={2}
-                placeholder="Topic, e.g. Climate-smart agriculture and smallholder livelihoods in West Africa"
-                className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-400"
+                rows={1}
+                onInput={(e) => {
+                  const el = e.target as HTMLTextAreaElement;
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
+                placeholder="Message Quill…"
+                className="flex-1 resize-none rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#181818] outline-none focus:ring-2 focus:ring-[#181818] min-h-[48px] max-h-[160px]"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -318,20 +449,29 @@ export function Studio() {
               />
               <button
                 disabled={busy || !prompt.trim()}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink text-paper disabled:opacity-40"
+                onClick={submit}
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                  busy || !prompt.trim()
+                    ? "bg-[#e5e5e5] text-[#999]"
+                    : "bg-[#181818] text-white hover:bg-[#333]"
+                }`}
                 aria-label="Send"
               >
-                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === "research" ? <Search className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                {busy ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
               </button>
             </div>
           </div>
-        </form>
+        </footer>
       </main>
     </div>
   );
 }
 
-function Welcome({ onPick }: { onPick: (topic: string) => void }) {
+function EmptyState({ onPick }: { onPick: (topic: string) => void }) {
   const samples = [
     "The role of large language models in academic research integrity",
     "Renewable microgrids for rural electrification in sub-Saharan Africa",
@@ -339,23 +479,24 @@ function Welcome({ onPick }: { onPick: (topic: string) => void }) {
     "Digital public infrastructure and financial inclusion in emerging markets",
   ];
   return (
-    <div className="rise rounded-3xl border border-border bg-paper p-5 sm:p-8">
-      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-gray-50 px-3 py-1 text-xs text-slate-600">
-        <Sparkles className="h-3.5 w-3.5" /> 100+ page consistent manuscripts
+    <div className="flex flex-col items-center justify-center h-full text-center p-12">
+      <div className="w-16 h-16 rounded-full bg-[#f2f2f2] flex items-center justify-center mb-6">
+        <Sparkles className="w-8 h-8 text-[#181818]" />
       </div>
-      <h1 className="mt-4 font-serif text-3xl leading-tight text-ink sm:text-4xl">Write the project. Cite the latest journals. Export the file.</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
-        Quill harvests OpenAlex and Crossref, locks a stable outline, writes chapter by chapter, and delivers PDF plus DOCX. New chats keep each manuscript separate.
+      <h1 className="text-2xl font-semibold text-[#181818] mb-2">Quill</h1>
+      <p className="text-[#666] mb-8 max-w-md px-4">
+        Write 20–150 page theses, projects, and literature reviews with live journal harvest, consistent structure, and PDF/DOCX export.
       </p>
-      <div className="mt-6 grid gap-2 sm:grid-cols-2">
+      <div className="space-y-3 w-full max-w-md px-4">
         {samples.map((s) => (
           <button
             key={s}
             onClick={() => onPick(s)}
-            className="rounded-2xl border border-border bg-paper p-4 text-left text-sm leading-6 text-slate-700 hover:border-slate-300 hover:bg-gray-50"
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] bg-white text-left text-sm text-[#181818] hover:bg-[#f2f2f2] transition-colors"
           >
-            <BookMarked className="mb-2 h-4 w-4 text-slate-600" />
-            {s}
+            <span className="flex items-center gap-2 text-[#666]">
+              <BookMarked className="w-4 h-4" /> {s}
+            </span>
           </button>
         ))}
       </div>

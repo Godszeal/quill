@@ -1,19 +1,25 @@
-import {
-  AlignmentType,
-  BorderStyle,
-  Document,
-  Footer,
-  Header,
-  HeadingLevel,
-  Packer,
-  PageNumber,
-  Paragraph,
-  TextRun,
-} from "docx";
 import type { Project } from "../types";
+import type { Paragraph } from "docx";
 import { frontMatter } from "../writer";
 
+async function loadDocx() {
+  return await import("docx");
+}
+
 export async function buildDocx(project: Project) {
+  const docx = await loadDocx();
+  const {
+    AlignmentType,
+    BorderStyle,
+    Document,
+    Footer,
+    Header,
+    HeadingLevel,
+    Packer,
+    PageNumber,
+    Paragraph,
+    TextRun,
+  } = docx;
   const meta = frontMatter(project);
   const children: Paragraph[] = [];
 

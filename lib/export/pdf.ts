@@ -1,17 +1,22 @@
-import PDFDocument from "pdfkit";
 import type { Chapter, Project } from "../types";
 import { frontMatter } from "../writer";
 
-function streamToBuffer(doc: PDFKit.PDFDocument) {
+async function loadPDFKit() {
+  const mod = await import("pdfkit");
+  return mod.default as unknown;
+}
+
+function streamToBuffer(doc: any) {
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
-    doc.on("data", (c) => chunks.push(Buffer.from(c)));
+    doc.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
   });
 }
 
 export async function buildPdf(project: Project) {
+  const PDFDocument = (await loadPDFKit()) as new (opts?: unknown) => any;
   const doc = new PDFDocument({
     size: "A4",
     bufferPages: true,
@@ -85,11 +90,11 @@ export async function buildPdf(project: Project) {
   return done;
 }
 
-function heading(doc: PDFKit.PDFDocument, text: string) {
+function heading(doc: any, text: string) {
   doc.font("Times-Bold").fontSize(16).fillColor("#0f172a").text(text, { paragraphGap: 10 });
 }
 
-function writeChapter(doc: PDFKit.PDFDocument, chapter: Chapter) {
+function writeChapter(doc: any, chapter: Chapter) {
   chapter.blocks.forEach((block) => {
     const size = block.level === 1 ? 16 : block.level === 2 ? 13 : 11.5;
     doc.moveDown(block.level === 1 ? 0.2 : 0.6);

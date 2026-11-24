@@ -6,7 +6,6 @@ import type { CitationStyle, DocumentType } from "@/lib/types";
 import { harvestSources } from "@/lib/research";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 10;
 
 type Body = {
   prompt: string;

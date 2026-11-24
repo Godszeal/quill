@@ -38,3 +38,6 @@ next-env.d.ts
 
 # local manuscript store
 /data
+
+# build artifacts
+mcp-server.zip

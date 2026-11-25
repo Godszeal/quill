@@ -531,7 +531,7 @@ export function Studio() {
                           <div className="max-w-[92%] sm:max-w-[90%]">
                             {m.kind !== "plan" ? (
                               <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
-                                <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} />
+                                <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} isDark={isDark} />
                                 {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
                                   <span className="animate-pulse inline-block w-1 h-[1em]" style={{ backgroundColor: textPrimary }} />
                                 )}

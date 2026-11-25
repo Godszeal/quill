@@ -1,19 +1,24 @@
 "use client";
 
-export function MarkdownText({ text }: { text: string }) {
-  const blocks = parseBlocks(text);
+export function MarkdownText({ text, isDark }: { text: string; isDark?: boolean }) {
+  const blocks = parseBlocks(text, isDark ?? false);
+  const ink = isDark ? "#e5e5e5" : "#181818";
+  const codeBg = isDark ? "#2a2a2a" : "#f2f2f2";
+  const codeInk = isDark ? "#ffffff" : "#181818";
+  const linkColor = isDark ? "#60a5fa" : "#2563eb";
+  const inlineCodeBg = isDark ? "#3a3a3a" : "#f2f2f2";
   return (
-    <div className="space-y-4 text-[#181818] leading-7 text-[14px]">
+    <div className="space-y-4 leading-7 text-[14px]" style={{ color: ink }}>
       {blocks.map((block, i) => (
         <div key={i} className={block.className}>
           {block.type === "code" ? (
-            <pre className="relative overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#f2f2f2] p-4 text-xs font-mono text-[#181818] leading-5">
+            <pre className="relative overflow-hidden rounded-xl border p-4 text-xs font-mono leading-5" style={{ borderColor: codeBg, backgroundColor: codeBg, color: codeInk }}>
               <code>{block.content}</code>
             </pre>
           ) : block.type === "heading" ? (
-            <h3 className={block.level === 1 ? "text-xl font-bold mb-2" : "text-lg font-semibold mb-2"} dangerouslySetInnerHTML={{ __html: block.content }} />
+            <h3 className={block.level === 1 ? "text-xl font-bold mb-2" : "text-lg font-semibold mb-2"} dangerouslySetInnerHTML={{ __html: block.content }} style={{ color: ink }} />
           ) : (
-            <p className="" dangerouslySetInnerHTML={{ __html: block.content }} />
+            <p className="" dangerouslySetInnerHTML={{ __html: block.content }} style={{ color: ink }} />
           )}
         </div>
       ))}
@@ -21,7 +26,7 @@ export function MarkdownText({ text }: { text: string }) {
   );
 }
 
-function parseBlocks(text: string): Array<{ type: string; content: string; className: string; level?: number }> {
+function parseBlocks(text: string, isDark: boolean = false): Array<{ type: string; content: string; className: string; level?: number }> {
   const blocks: Array<{ type: string; content: string; className: string; level?: number }> = [];
   const lines = text.split("\n");
   let i = 0;
@@ -44,7 +49,7 @@ function parseBlocks(text: string): Array<{ type: string; content: string; class
     const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      const content = inlineMarkdown(headingMatch[2]);
+      const content = inlineMarkdown(headingMatch[2], isDark);
       blocks.push({ type: "heading", content, className: "", level });
       i++;
       continue;
@@ -54,7 +59,7 @@ function parseBlocks(text: string): Array<{ type: string; content: string; class
       const listItems: string[] = [];
       while (i < lines.length && (lines[i].match(/^[-*+]\s+/) || lines[i].match(/^\d+\.\s+/))) {
         const itemContent = lines[i].replace(/^[-*+]\s+/, "").replace(/^\d+\.\s+/, "");
-        listItems.push(`<li>${inlineMarkdown(itemContent)}</li>`);
+        listItems.push(`<li>${inlineMarkdown(itemContent, isDark)}</li>`);
         i++;
       }
       blocks.push({ type: "list", content: `<ul class="list-disc list-inside my-2">${listItems.join("")}</ul>`, className: "" });
@@ -68,7 +73,7 @@ function parseBlocks(text: string): Array<{ type: string; content: string; class
         paraLines.push(lines[i]);
         i++;
       }
-      const content = inlineMarkdown(paraLines.join(" "));
+      const content = inlineMarkdown(paraLines.join(" "), isDark);
       blocks.push({ type: "paragraph", content, className: "" });
       continue;
     }
@@ -77,16 +82,22 @@ function parseBlocks(text: string): Array<{ type: string; content: string; class
   }
 
   if (blocks.length === 0) {
-    blocks.push({ type: "paragraph", content: inlineMarkdown(text), className: "" });
+      blocks.push({ type: "paragraph", content: inlineMarkdown(text, isDark), className: "" });
   }
 
   return blocks;
 }
 
-function inlineMarkdown(text: string): string {
+function inlineMarkdown(text: string, isDark: boolean = false): string {
+  const ink = isDark ? "#e5e5e5" : "#181818";
+  const inlineCodeBg = isDark ? "#3a3a3a" : "#f2f2f2";
+  const linkColor = isDark ? "#60a5fa" : "#2563eb";
   return text
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code class=\"rounded bg-[#f2f2f2] px-1 py-0.5 font-mono text-[12px]\">$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-[#2563eb] underline underline-offset-4" target="_blank" rel="noreferrer">$1</a>');
+    .replace(/`([^`]+)`/g, `<code style="background:${inlineCodeBg};color:${ink}" class="rounded px-1 py-0.5 font-mono text-[12px]">$1</code>`)
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      `<a href="$2" style="color:${linkColor}" class="underline underline-offset-4" target="_blank" rel="noreferrer">$1</a>`,
+    );
 }

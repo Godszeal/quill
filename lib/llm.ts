@@ -33,47 +33,107 @@ export async function llmWriteChapter(params: {
   targetWords: number;
 }) {
   const c = getClient();
-  if (!c) throw new Error("USER_LLM_API_KEY not configured");
+  if (c) {
+    try {
+      const sourceList = params.sources
+        .map(
+          (s) =>
+            `- ${s.title} (${s.year})${s.authors.length ? ` by ${s.authors.join(", ")}` : ""}${
+              s.venue ? `, ${s.venue}` : ""
+            }${s.doi ? ` DOI:${s.doi}` : ""}`
+        )
+        .join("\n");
 
-  const sourceList = params.sources
-    .map(
-      (s) =>
-        `- ${s.title} (${s.year})${s.authors.length ? ` by ${s.authors.join(", ")}` : ""}${
-          s.venue ? `, ${s.venue}` : ""
-        }${s.doi ? ` DOI:${s.doi}` : ""}`
-    )
-    .join("\n");
+      const { section } = params;
+      const prompt = [
+        `You are an academic writing assistant for a ${params.documentType}.`,
+        `Topic: ${params.topic}`,
+        `Citation style: ${params.style}`,
+        `Chapter ${section.number}: ${section.title}`,
+        `Chapter summary: ${section.summary}`,
+        `Target length: approximately ${params.targetWords} words.`,
+        "",
+        "Use these recent journal sources as the evidential base:",
+        sourceList,
+        "",
+        "Requirements:",
+        "- Write formal academic prose with citations woven in (Author, Year).",
+        "- Include subsection headings.",
+        "- Do not invent facts; ground claims in the provided sources.",
+        "- End with implications for the manuscript.",
+        "",
+        "Write the chapter now:",
+      ].join("\n");
 
-  const { section } = params;
-  const prompt = [
-    `You are an academic writing assistant for a ${params.documentType}.`,
-    `Topic: ${params.topic}`,
-    `Citation style: ${params.style}`,
-    `Chapter ${section.number}: ${section.title}`,
-    `Chapter summary: ${section.summary}`,
-    `Target length: approximately ${params.targetWords} words.`,
-    "",
-    "Use these recent journal sources as the evidential base:",
-    sourceList,
-    "",
-    "Requirements:",
-    "- Write formal academic prose with citations woven in (Author, Year).",
-    "- Include subsection headings.",
-    "- Do not invent facts; ground claims in the provided sources.",
-    "- End with implications for the manuscript.",
-    "",
-    "Write the chapter now:",
-  ].join("\n");
+      const completion = await c.chat.completions.create({
+        model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.4,
+        max_tokens: 3000,
+      });
+      const text = completion.choices[0]?.message?.content || "";
+      if (text) return text;
+    } catch (error: any) {
+      const msg = error?.message || error?.toString() || "unknown error";
+      // Fall through to cantrustai fallback
+    }
+  }
 
-  const completion = await c.chat.completions.create({
-    model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.4,
-    max_tokens: 3000,
-  });
+  // Fallback: cantrustai.xyz Claude Haiku
+  try {
+    const sourceList = params.sources
+      .map(
+        (s) =>
+          `- ${s.title} (${s.year})${s.authors.length ? ` by ${s.authors.join(", ")}` : ""}${
+            s.venue ? `, ${s.venue}` : ""
+          }${s.doi ? ` DOI:${s.doi}` : ""}`
+      )
+      .join("\n");
 
-  const text = completion.choices[0]?.message?.content || "";
-  return text;
+    const { section } = params;
+    const prompt = [
+      `You are an academic writing assistant for a ${params.documentType}.`,
+      `Topic: ${params.topic}`,
+      `Citation style: ${params.style}`,
+      `Chapter ${section.number}: ${section.title}`,
+      `Chapter summary: ${section.summary}`,
+      `Target length: approximately ${params.targetWords} words.`,
+      "",
+      "Use these recent journal sources as the evidential base:",
+      sourceList,
+      "",
+      "Requirements:",
+      "- Write formal academic prose with citations woven in (Author, Year).",
+      "- Include subsection headings.",
+      "- Do not invent facts; ground claims in the provided sources.",
+      "- End with implications for the manuscript.",
+      "",
+      "Write the chapter now:",
+    ].join("\n");
+
+    const fallbackRes = await fetch("https://api.cantrustai.xyz/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer ctai_dsoiueU0_qwTrhTgbX8KAy6PuzhgmJLB5n03MvE8q",
+      },
+      body: JSON.stringify({
+        model: "anthropic/claude-haiku-5.5",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.4,
+        max_tokens: 3000,
+      }),
+    });
+    if (!fallbackRes.ok) {
+      const errText = await fallbackRes.text().catch(() => "");
+      throw new Error(`Fallback LLM failed (${fallbackRes.status}): ${errText}`);
+    }
+    const data = await fallbackRes.json();
+    return data.choices?.[0]?.message?.content || "";
+  } catch (error: any) {
+    const msg = error?.message || error?.toString() || "unknown error";
+    throw new Error(`LLM request failed: ${msg}`);
+  }
 }
 
 export function resetLlmClient() {

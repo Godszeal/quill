@@ -151,7 +151,8 @@ export interface ChatMessage {
     | "error"
     | "suggestion"
     | "poll"
-    | "task";
+    | "task"
+    | "write";
   content: string;
   createdAt: string;
   meta?: Record<string, unknown>;

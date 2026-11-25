@@ -35,6 +35,7 @@ type SlimProject = Pick<
   | "commands"
   | "outline"
   | "files"
+  | "tasks"
   | "wordCount"
   | "pageEstimate"
   | "currentChapterIndex"
@@ -770,7 +771,12 @@ export function Studio() {
                                       key={i}
                                       onClick={() => {
                                         setPollVotes((prev) => ({ ...prev, [m.id]: ans }));
-                                        showToast(`Selected: ${ans}`, "success");
+                                        setTaskCompleted((prev) => {
+                                          const next = { ...prev };
+                                          (project?.tasks || []).forEach((t) => { next[t.id] = true; });
+                                          return next;
+                                        });
+                                        showToast(`Selected: ${ans} — all tasks marked complete`, "success");
                                       }}
                                       className={`px-3 py-1.5 rounded-full text-xs sm:text-sm border transition-colors ${
                                         pollVotes[m.id] === ans
@@ -784,6 +790,28 @@ export function Studio() {
                                   ))}
                                 </div>
                                 <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                  <label className="block text-xs font-medium mb-1" style={{ color: textSecondary }}>
+                                    Or type your own answer:
+                                  </label>
+                                  <input
+                                    className="w-full px-3 py-2 rounded-lg border bg-transparent focus:ring-2 focus-ring-[#3b82f6] outline-none text-sm"
+                                    style={{ borderColor, color: textPrimary }}
+                                    placeholder="Your answer..."
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        const val = (e.target as HTMLInputElement).value.trim();
+                                        if (val) {
+                                          setPollVotes((prev) => ({ ...prev, [m.id]: val }));
+                                          setTaskCompleted((prev) => {
+                                            const next = { ...prev };
+                                            (project?.tasks || []).forEach((t) => { next[t.id] = true; });
+                                            return next;
+                                          });
+                                          showToast(`Answer recorded: ${val} — all tasks marked complete`, "success");
+                                        }
+                                      }
+                                    }}
+                                  />
                                   <button
                                     onClick={() => toggleThinking(m.id)}
                                     className="text-xs sm:text-sm flex items-center gap-1 transition-colors"
@@ -905,7 +933,36 @@ export function Studio() {
                                 </div>
                               </div>
                             )}
-                            {m.kind !== "suggestion" && m.kind !== "poll" && m.kind !== "task" && m.kind !== "plan" ? (
+                            {m.kind === "write" && m.meta && (
+                              <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                                <div className="mb-3">
+                                  <span className="text-xs font-medium" style={{ color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Manuscript complete
+                                  </span>
+                                  <div className="mt-2 text-sm leading-relaxed" style={{ color: textPrimary }}>
+                                    {m.content}
+                                  </div>
+                                </div>
+                                <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                  <button
+                                    onClick={() => toggleThinking(m.id)}
+                                    className="text-xs sm:text-sm flex items-center gap-1 transition-colors"
+                                    style={{ color: "#3b82f6" }}
+                                  >
+                                    {thinkingOpen[m.id] ? "Hide thinking" : "Show thinking"}
+                                    <span className={`w-3 h-3 ${thinkingOpen[m.id] ? "rotate-180" : ""}`} style={{ transition: "transform 0.2s" }}>
+                                      <ChevronDown className="w-3 h-3" style={{ color: "#3b82f6" }} />
+                                    </span>
+                                  </button>
+                                  {thinkingOpen[m.id] && (
+                                    <div className="mt-2 pt-2 text-sm leading-relaxed" style={{ color: textSecondary, fontStyle: "italic" }}>
+                                      {(m.meta as any).thinking || "No thinking trace available."}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {m.kind !== "suggestion" && m.kind !== "poll" && m.kind !== "task" && m.kind !== "plan" && m.kind !== "write" ? (
                               <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
                                 <div className="flex items-center justify-between mb-2">
                                   <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} isDark={isDark} />

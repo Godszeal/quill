@@ -93,6 +93,8 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
   };
 
   const done = (id: PipelineStep["id"]) => project.steps.find((s) => s.id === id)?.status === "done";
+  const thinking: string[] = [];
+  const pushThinking = (text: string) => thinking.push(text);
 
   try {
     if (!resume || !done("intake")) {
@@ -105,9 +107,8 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       );
       await say(project.chatId, {
         role: "assistant",
-        kind: "plan",
-        content: `I will write a consistent ${project.targetPages}+ page ${project.documentType.replace("-", " ")} on “${project.topic}”. Pipeline: intake → journal harvest → ranking → outline → chapter writing → consistency → citations → export (PDF + DOCX).`,
-        meta: { steps: project.steps, targetPages: project.targetPages },
+        kind: "text",
+        content: `I’ll help you write about “${project.topic}”. Let me start by gathering recent research and building a solid outline before drafting the chapters.`,
       });
       setStep(project, "intake", "done");
       await emit();
@@ -122,35 +123,8 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       setStep(project, "research", "done");
       setStep(project, "rank", "running");
       command(project, "quill rank --dedupe --year-weight 1.2", `Kept ${sources.length} unique papers.`);
-      const srcMsg = await say(project.chatId, {
-        role: "assistant",
-        kind: "sources",
-        content: `Harvested ${sources.length} recent papers from OpenAlex and Crossref. Highest-citation and newest work is ranked first.`,
-        meta: { sources: sources.slice(0, 18) },
-      });
       setStep(project, "rank", "done");
-      await emit(srcMsg);
-
-      // Suggest questions about the topic for the user to vote on / answer
-      const suggestedQuestions = [
-        `What is the primary research gap in “${project.topic}”?`,
-        `Which methodology best fits a ${project.documentType.replace("-", " ")} on this topic?`,
-        `How should the findings be structured across ${project.targetPages} pages?`,
-        `What are the key limitations to acknowledge?`,
-      ];
-      const suggestion: Suggestion = {
-        id: nid(),
-        question: suggestedQuestions[0],
-        answers: suggestedQuestions.slice(1),
-        createdAt: nowIso(),
-      };
-      project.suggestions = [suggestion];
-      await say(project.chatId, {
-        role: "assistant",
-        kind: "suggestion",
-        content: `Here is a key question to consider for your manuscript: “${suggestion.question}”`,
-        meta: { suggestion },
-      });
+      pushThinking(`Research: Harvested ${sources.length} unique papers from OpenAlex and Crossref for “${project.topic}”.`);
       await emit();
     }
 
@@ -172,34 +146,8 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
         sourceIds: section.sourceIds,
         status: "pending",
       }));
-      const outlineMsg = await say(project.chatId, {
-        role: "assistant",
-        kind: "outline",
-        content: `Outline locked for consistency. ${outline.length} chapters, ~${project.targetPages} pages.`,
-        meta: { outline },
-      });
+      pushThinking(`Outline: ${outline.length} chapters mapped across ~${project.targetPages} pages.`);
       setStep(project, "outline", "done");
-      await emit(outlineMsg);
-
-      // Poll: let user vote on chapter priority
-      const pollOptions = outline.map((s, i) => ({
-        id: nid(),
-        text: `Chapter ${i + 1}: ${s.title}`,
-        votes: 0,
-      }));
-      const poll: Poll = {
-        id: nid(),
-        question: "Which chapter should be prioritized first?",
-        options: pollOptions,
-        createdAt: nowIso(),
-      };
-      project.polls = [poll];
-      await say(project.chatId, {
-        role: "assistant",
-        kind: "poll",
-        content: "Vote on which chapter to prioritize:",
-        meta: { poll },
-      });
       await emit();
     }
 
@@ -219,9 +167,8 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
 
         let chapterText: string | null = null;
         const usedSources = project.sources.filter((s) => outline[i].sourceIds.includes(s.id));
-        if (llmConfigured()) {
-          try {
-            chapterText = await llmWriteChapter({
+        try {
+          chapterText = await llmWriteChapter({
               topic: project.topic,
               section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
               sources: usedSources.map((s) => ({
@@ -239,7 +186,6 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
           } catch (error) {
             command(project, `quill llm --chapter ${outline[i].number}`, String(error instanceof Error ? error.message : "LLM failed"), "error");
           }
-        }
         if (!chapterText?.trim()) {
           chapterText = null;
         }
@@ -260,41 +206,14 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
         };
         project.wordCount = wordCountOf(project.chapters.filter((c) => c.status === "done"));
         project.pageEstimate = pageEstimateOf(project.chapters.filter((c) => c.status === "done"));
-        const progress = await say(project.chatId, {
-          role: "assistant",
-          kind: "progress",
-          content: `Chapter ${outline[i].number} complete: ${outline[i].title} (${wordCount.toLocaleString()} words, ~${pageEstimate} pages).`,
-          meta: {
-            chapter: {
-              number: outline[i].number,
-              title: outline[i].title,
-              wordCount,
-              pageEstimate,
-            },
-            done: i + 1,
-            total: outline.length,
-            wordCount: project.wordCount,
-            pageEstimate: project.pageEstimate,
-          },
-        });
-        await emit(progress);
+        pushThinking(`Chapter ${outline[i].number}: ${outline[i].title}\n${effectiveText}\n`);
       }
       setStep(project, "write", "done");
 
-      // Create follow-up tasks for the user
-      const tasks: Task[] = [
+      project.tasks = [
         { id: nid(), title: "Review chapter outlines and confirm structure", completed: false, createdAt: nowIso() },
         { id: nid(), title: "Select preferred export format (PDF / DOCX / both)", completed: false, createdAt: nowIso() },
-        { id: nid(), title: "Vote on chapter priority poll", completed: false, createdAt: nowIso() },
       ];
-      project.tasks = tasks;
-      await say(project.chatId, {
-        role: "assistant",
-        kind: "task",
-        content: "Here are follow-up tasks you can track:",
-        meta: { tasks },
-      });
-      await emit();
     }
 
     if (!resume || !done("consistency")) {
@@ -356,13 +275,28 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       project.pageEstimate = pageEstimateOf(project.chapters);
       command(project, "ls exports/", project.files.map((f) => `${f.name}  ${prettyBytes(f.size)}`).join("\n"));
 
-      const fileMsg = await say(project.chatId, {
+      // Mark all tasks as complete once the manuscript is finished
+      project.tasks = project.tasks.map((t) => ({ ...t, completed: true }));
+
+      pushThinking(`Research: Harvested ${project.sources.length} papers from OpenAlex and Crossref.`);
+      pushThinking(`Outline: ${project.outline.length} chapters, ~${project.targetPages} pages.`);
+      pushThinking(`Export: ${project.files.map((f) => `${f.name} (${f.format.toUpperCase()})`).join(", ")}.`);
+
+      const summary = `Manuscript ready on “${project.topic}”. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download ${project.files.map((f) => f.format.toUpperCase()).join(" / ")}.`;
+      await say(project.chatId, {
         role: "assistant",
-        kind: "file",
-        content: `Manuscript ready. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download ${project.files.map((f) => f.format.toUpperCase()).join(" / ")}.`,
-        meta: { files: project.files, wordCount: project.wordCount, pageEstimate: project.pageEstimate },
+        kind: "write",
+        content: summary,
+        meta: {
+          thinking: thinking.join("\n\n---\n\n"),
+          files: project.files,
+          wordCount: project.wordCount,
+          pageEstimate: project.pageEstimate,
+          sources: project.sources,
+          outline: project.outline,
+        },
       });
-      await emit(fileMsg);
+      await emit();
       const existing = await getChat(project.chatId);
       await upsertChat({
         ...(existing || { id: project.chatId, title: project.topic.slice(0, 72), createdAt: project.createdAt, updatedAt: nowIso() }),

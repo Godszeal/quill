@@ -253,3 +253,49 @@ export async function readBinaryFile(fileId: string): Promise<Buffer | null> {
     return null;
   }
 }
+
+export async function clearAllData(): Promise<void> {
+  const db = await connectMongo();
+  if (db) {
+    await db.collection("chats").deleteMany({});
+    await db.collection("messages").deleteMany({});
+    await db.collection("projects").deleteMany({});
+    try {
+      const bucket = new GridFSBucket(db, { bucketName: "exports" });
+      const files = await db.collection("exports.files").find({}).toArray();
+      for (const f of files) {
+        await bucket.delete(f._id as ObjectId);
+      }
+    } catch {
+      // ignore GridFS cleanup errors
+    }
+    return;
+  }
+  await ensureFileStore();
+  if (fileCache) {
+    fileCache.chats = [];
+    fileCache.messages = [];
+    fileCache.projects = [];
+    await persistFileStore();
+  }
+  // Clear exported files from disk
+  try {
+    const fileDir = process.env.VERCEL ? TMP_FILE_DIR : FILE_DIR;
+    const entries = await (() => {
+      try {
+        return require("fs/promises").readdir(fileDir);
+      } catch {
+        return [];
+      }
+    })();
+    for (const entry of entries) {
+      try {
+        await require("fs/promises").unlink(path.join(fileDir, entry));
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+}

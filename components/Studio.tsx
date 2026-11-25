@@ -61,6 +61,7 @@ export function Studio() {
   const [institution, setInstitution] = useState("");
   const [mode, setMode] = useState<"write" | "research">("write");
   const [fileType, setFileType] = useState<"pdf" | "docx" | "both">("both");
+  const [clearing, setClearing] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
@@ -148,6 +149,7 @@ export function Studio() {
     if (abortController.current) abortController.current.abort();
     const ac = new AbortController();
     abortController.current = ac;
+    const streamTimer = setTimeout(() => ac.abort(), 120000);
     setBusy(true);
     setStopping(false);
     try {
@@ -192,6 +194,7 @@ export function Studio() {
         showToast(err instanceof Error ? err.message : "Request failed", "error");
       }
     } finally {
+      clearTimeout(streamTimer);
       setBusy(false);
       setStopping(false);
       abortController.current = null;
@@ -281,6 +284,28 @@ export function Studio() {
     setRenamingId(null);
   };
 
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await fetch("/api/auth/clear-all", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to clear data");
+      setMessages([]);
+      setProject(null);
+      setChats([]);
+      setChatId(null);
+      setBusy(false);
+      setSettingsOpen(false);
+      showToast("All files and chats cleared", "success");
+      if (typeof window !== "undefined") {
+        window.location.href = "/auth/signin";
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to clear data", "error");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       const list = await loadChats();
@@ -332,6 +357,7 @@ export function Studio() {
     if (abortController.current) abortController.current.abort();
     const ac = new AbortController();
     abortController.current = ac;
+    const streamTimer = setTimeout(() => ac.abort(), 120000);
     let id = chatId;
     if (!id) {
       const res = await fetch("/api/chats", { method: "POST" });
@@ -406,6 +432,7 @@ export function Studio() {
         showToast(err instanceof Error ? err.message : "Request failed", "error");
       }
     } finally {
+      clearTimeout(streamTimer);
       setBusy(false);
       setStopping(false);
       abortController.current = null;
@@ -437,11 +464,7 @@ export function Studio() {
         >
           <div className="h-16 flex items-center justify-between px-4 border-b shrink-0" style={{ borderColor }}>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: textPrimary }}>
-                <span className="text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>
-                  Q
-                </span>
-              </div>
+              <img src="/logo.webp" alt="Quill" className="w-8 h-8 object-contain shrink-0" />
               <span className="text-sm font-semibold tracking-tight" style={{ color: textPrimary }}>
                 Quill
               </span>
@@ -1260,6 +1283,18 @@ export function Studio() {
                       placeholder="Institution"
                     />
                   </div>
+                </div>
+                <div className="mt-6 pt-4 border-t" style={{ borderColor }}>
+                  <button
+                    onClick={handleClearAll}
+                    disabled={clearing}
+                    className="w-full py-2.5 rounded-lg border border-[#ef4444] text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    {clearing ? "Clearing…" : "Clear all files and chats"}
+                  </button>
+                  <p className="text-[11px] mt-1.5" style={{ color: textSecondary }}>
+                    Permanently deletes every chat, message, manuscript, and export file. You’ll be signed out.
+                  </p>
                 </div>
               </div>
             </div>

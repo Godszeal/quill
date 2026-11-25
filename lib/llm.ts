@@ -2,6 +2,23 @@ import { OpenAI } from "openai";
 
 let client: OpenAI | null = null;
 
+const LLM_TIMEOUT_MS = 60000;
+
+function fetchWithTimeout(url: string, opts: RequestInit, ms = LLM_TIMEOUT_MS) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  return fetch(url, { ...opts, signal: ac.signal }).then((res) => {
+    clearTimeout(timer);
+    return res;
+  }, (err) => {
+    clearTimeout(timer);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`LLM request timed out after ${ms / 1000}s`);
+    }
+    throw err;
+  });
+}
+
 function getClient(): OpenAI | null {
   if (client) return client;
   const apiKey = process.env.USER_LLM_API_KEY;
@@ -111,7 +128,7 @@ export async function llmWriteChapter(params: {
       "Write the chapter now:",
     ].join("\n");
 
-    const fallbackRes = await fetch("https://api.cantrustai.xyz/v1/chat/completions", {
+    const fallbackRes = await fetchWithTimeout("https://api.cantrustai.xyz/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -195,7 +212,7 @@ export async function llmChat(message: string): Promise<string> {
 
   // Fallback: cantrustai.xyz Claude Haiku
   try {
-    const fallbackRes = await fetch("https://api.cantrustai.xyz/v1/chat/completions", {
+    const fallbackRes = await fetchWithTimeout("https://api.cantrustai.xyz/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

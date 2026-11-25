@@ -137,6 +137,61 @@ export function Studio() {
     showToast("Stopped", "info");
   };
 
+  const resumeStream = async (id: string) => {
+    if (abortController.current) abortController.current.abort();
+    const ac = new AbortController();
+    abortController.current = ac;
+    setBusy(true);
+    setStopping(false);
+    try {
+      const res = await fetch(`/api/chats/${id}/resume`, {
+        method: "POST",
+        signal: ac.signal,
+      });
+      const ctype = res.headers.get("content-type") || "";
+      if (ctype.includes("ndjson") && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        while (true) {
+          if (ac.signal.aborted) {
+            reader.cancel();
+            break;
+          }
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const evt = JSON.parse(line);
+            if (evt.project) setProject(evt.project);
+            if (evt.message) {
+              setMessages((m) => [...m, evt.message]);
+              if (evt.message.role === "assistant" && evt.message.kind === "text") {
+                setTypingMessageId(evt.message.id);
+                setTypingChars(0);
+              }
+            }
+          }
+        }
+      }
+      await loadChats();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        showToast("Stopped", "info");
+      } else {
+        showToast(err instanceof Error ? err.message : "Request failed", "error");
+      }
+    } finally {
+      setBusy(false);
+      setStopping(false);
+      abortController.current = null;
+      await openChat(id);
+    }
+  };
+
   const loadChats = async () => {
     const res = await fetch("/api/chats");
     const data = await res.json();
@@ -152,6 +207,7 @@ export function Studio() {
     const data = await res.json();
     setMessages(data.messages || []);
     setProject(data.project || null);
+    return data;
   };
 
   const newChat = async () => {
@@ -177,9 +233,9 @@ export function Studio() {
       async () => {
         if (!pendingDeleteId) return;
         await fetch(`/api/chats/${pendingDeleteId}`, { method: "DELETE" });
-        await loadChats();
+        const updatedChats = await loadChats();
         if (chatId === pendingDeleteId) {
-          const list = chats.filter((c) => c.id !== pendingDeleteId);
+          const list = updatedChats.filter((c) => c.id !== pendingDeleteId);
           if (list[0]) await openChat(list[0].id);
           else await newChat();
         }
@@ -207,8 +263,15 @@ export function Studio() {
   useEffect(() => {
     (async () => {
       const list = await loadChats();
-      if (list[0]) await openChat(list[0].id);
-      else await newChat();
+      if (list[0]) {
+        const data = await openChat(list[0].id);
+        const proj = data.project;
+        if (!busy && proj && proj.status && proj.status !== "complete" && proj.status !== "error" && proj.status !== "draft") {
+          await resumeStream(list[0].id);
+        }
+      } else {
+        await newChat();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -306,7 +369,13 @@ export function Studio() {
           }
         }
       } else {
-        await openChat(id!);
+        const data = await openChat(id!);
+        const msgs = (data && data.messages) || [];
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === "assistant" && last.kind === "text") {
+          setTypingMessageId(last.id);
+          setTypingChars(0);
+        }
       }
       await loadChats();
     } catch (err) {

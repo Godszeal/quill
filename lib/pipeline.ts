@@ -10,7 +10,7 @@ import {
 } from "./writer";
 import { buildPdf } from "./export/pdf";
 import { buildDocx } from "./export/docx";
-import { addMessage, saveBinaryFile, upsertChat, upsertProject } from "./db";
+import { addMessage, getChat, saveBinaryFile, upsertChat, upsertProject } from "./db";
 import { llmConfigured, llmWriteChapter } from "./llm";
 
 const STEP_DEFS: Array<{ id: PipelineStep["id"]; label: string; detail: string }> = [
@@ -80,204 +80,223 @@ export function createProjectDraft(input: {
   };
 }
 
-export async function runPipeline(project: Project, onTick?: (project: Project, message?: ChatMessage) => Promise<void>) {
+export async function runPipeline(project: Project, onTick?: (project: Project, message?: ChatMessage) => Promise<void>, resume = false) {
   const emit = async (message?: ChatMessage) => {
     project.updatedAt = nowIso();
     await upsertProject(project);
     if (onTick) await onTick(project, message);
   };
 
+  const done = (id: PipelineStep["id"]) => project.steps.find((s) => s.id === id)?.status === "done";
+
   try {
-    project.status = "researching";
-    setStep(project, "intake", "running");
-    command(
-      project,
-      "quill intake --normalize",
-      `topic=${project.topic}; type=${project.documentType}; pages=${project.targetPages}; style=${project.citationStyle}`
-    );
-    await say(project.chatId, {
-      role: "assistant",
-      kind: "plan",
-      content: `I will write a consistent ${project.targetPages}+ page ${project.documentType.replace("-", " ")} on “${project.topic}”. Pipeline: intake → journal harvest → ranking → outline → chapter writing → consistency → citations → export (PDF + DOCX).`,
-      meta: { steps: project.steps, targetPages: project.targetPages },
-    });
-    setStep(project, "intake", "done");
-    await emit();
-
-    setStep(project, "research", "running");
-    command(project, "openalex search --recent --sort cited_by_count", `Harvesting journals for: ${project.topic}`);
-    command(project, "crossref works --filter from-pub-date", "Secondary harvest from Crossref metadata.");
-    const sources = await harvestSources(project.topic, project.targetPages >= 100 ? 56 : 40);
-    project.sources = sources;
-    setStep(project, "research", "done");
-    setStep(project, "rank", "running");
-    command(project, "quill rank --dedupe --year-weight 1.2", `Kept ${sources.length} unique papers.`);
-    const srcMsg = await say(project.chatId, {
-      role: "assistant",
-      kind: "sources",
-      content: `Harvested ${sources.length} recent papers from OpenAlex and Crossref. Highest-citation and newest work is ranked first.`,
-      meta: { sources: sources.slice(0, 18) },
-    });
-    setStep(project, "rank", "done");
-    await emit(srcMsg);
-
-    project.status = "outlining";
-    setStep(project, "outline", "running");
-    command(project, "quill outline --pages " + project.targetPages, "Allocating a stable chapter architecture.");
-    const outline = assignSources(buildOutline(project.topic, project.documentType, project.targetPages), sources);
-    project.outline = outline;
-    project.chapters = outline.map((section) => ({
-      id: section.id,
-      number: section.number,
-      title: section.title,
-      summary: section.summary,
-      blocks: [],
-      wordCount: 0,
-      pageEstimate: section.targetPages,
-      sourceIds: section.sourceIds,
-      status: "pending",
-    }));
-    const outlineMsg = await say(project.chatId, {
-      role: "assistant",
-      kind: "outline",
-      content: `Outline locked for consistency. ${outline.length} chapters, ~${project.targetPages} pages.`,
-      meta: { outline },
-    });
-    setStep(project, "outline", "done");
-    await emit(outlineMsg);
-
-    project.status = "writing";
-    setStep(project, "write", "running");
-    for (let i = 0; i < outline.length; i += 1) {
-      project.currentChapterIndex = i;
-      project.chapters[i] = { ...project.chapters[i], status: "writing" };
+    if (!resume || !done("intake")) {
+      project.status = "researching";
+      setStep(project, "intake", "running");
       command(
         project,
-        `quill write --chapter ${outline[i].number} --pages ${outline[i].targetPages}`,
-        `Composing ${outline[i].title}`
+        "quill intake --normalize",
+        `topic=${project.topic}; type=${project.documentType}; pages=${project.targetPages}; style=${project.citationStyle}`
       );
-
-      let chapterText: string | null = null;
-      const usedSources = sources.filter((s) => outline[i].sourceIds.includes(s.id));
-      if (llmConfigured()) {
-        try {
-          chapterText = await llmWriteChapter({
-            topic: project.topic,
-            section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
-            sources: usedSources.map((s) => ({
-              title: s.title,
-              year: s.year,
-              authors: s.authors,
-              venue: s.venue,
-              doi: s.doi,
-              abstract: s.abstract,
-            })),
-            style: project.citationStyle,
-            documentType: project.documentType,
-            targetWords: outline[i].targetPages * 280,
-          });
-        } catch (error) {
-          command(project, `quill llm --chapter ${outline[i].number}`, String(error instanceof Error ? error.message : "LLM failed"), "error");
-        }
-      }
-      if (!chapterText?.trim()) {
-        chapterText = null;
-      }
-
-      const effectiveText = chapterText || "";
-      const wordCount = effectiveText.split(/\s+/).filter(Boolean).length;
-      const pageEstimate = Math.max(1, Math.round(wordCount / 280));
-      project.chapters[i] = {
-        id: outline[i].id,
-        number: outline[i].number,
-        title: outline[i].title,
-        summary: outline[i].summary,
-        blocks: effectiveText ? [{ heading: outline[i].title, level: 1, paragraphs: [effectiveText] }] : [],
-        wordCount,
-        pageEstimate,
-        sourceIds: chapterText ? usedSources.map((s) => s.id) : [],
-        status: chapterText ? "done" : "pending",
-      };
-      project.wordCount = wordCountOf(project.chapters.filter((c) => c.status === "done"));
-      project.pageEstimate = pageEstimateOf(project.chapters.filter((c) => c.status === "done"));
-      const progress = await say(project.chatId, {
+      await say(project.chatId, {
         role: "assistant",
-        kind: "progress",
-        content: `Chapter ${outline[i].number} complete: ${outline[i].title} (${wordCount.toLocaleString()} words, ~${pageEstimate} pages).`,
-        meta: {
-          chapter: {
-            number: outline[i].number,
-            title: outline[i].title,
-            wordCount,
-            pageEstimate,
-          },
-          done: i + 1,
-          total: outline.length,
-          wordCount: project.wordCount,
-          pageEstimate: project.pageEstimate,
-        },
+        kind: "plan",
+        content: `I will write a consistent ${project.targetPages}+ page ${project.documentType.replace("-", " ")} on “${project.topic}”. Pipeline: intake → journal harvest → ranking → outline → chapter writing → consistency → citations → export (PDF + DOCX).`,
+        meta: { steps: project.steps, targetPages: project.targetPages },
       });
-      await emit(progress);
+      setStep(project, "intake", "done");
+      await emit();
     }
-    setStep(project, "write", "done");
 
-    setStep(project, "consistency", "running");
-    command(project, "quill lint --terms --numbering --aims", "Terminology and chapter numbering aligned.");
-    setStep(project, "consistency", "done");
-    setStep(project, "citations", "running");
-    project.bibliography = bibliography(sources, project.citationStyle);
-    command(project, `quill cite --style ${project.citationStyle}`, `${project.bibliography.length} bibliography entries.`);
-    setStep(project, "citations", "done");
+    if (!resume || !done("research")) {
+      setStep(project, "research", "running");
+      command(project, "openalex search --recent --sort cited_by_count", `Harvesting journals for: ${project.topic}`);
+      command(project, "crossref works --filter from-pub-date", "Secondary harvest from Crossref metadata.");
+      const sources = await harvestSources(project.topic, project.targetPages >= 100 ? 56 : 40);
+      project.sources = sources;
+      setStep(project, "research", "done");
+      setStep(project, "rank", "running");
+      command(project, "quill rank --dedupe --year-weight 1.2", `Kept ${sources.length} unique papers.`);
+      const srcMsg = await say(project.chatId, {
+        role: "assistant",
+        kind: "sources",
+        content: `Harvested ${sources.length} recent papers from OpenAlex and Crossref. Highest-citation and newest work is ranked first.`,
+        meta: { sources: sources.slice(0, 18) },
+      });
+      setStep(project, "rank", "done");
+      await emit(srcMsg);
+    }
+
+    if (!resume || !done("outline")) {
+      project.status = "outlining";
+      setStep(project, "outline", "running");
+      command(project, "quill outline --pages " + project.targetPages, "Allocating a stable chapter architecture.");
+      const sources = project.sources;
+      const outline = assignSources(buildOutline(project.topic, project.documentType, project.targetPages), sources);
+      project.outline = outline;
+      project.chapters = outline.map((section) => ({
+        id: section.id,
+        number: section.number,
+        title: section.title,
+        summary: section.summary,
+        blocks: [],
+        wordCount: 0,
+        pageEstimate: section.targetPages,
+        sourceIds: section.sourceIds,
+        status: "pending",
+      }));
+      const outlineMsg = await say(project.chatId, {
+        role: "assistant",
+        kind: "outline",
+        content: `Outline locked for consistency. ${outline.length} chapters, ~${project.targetPages} pages.`,
+        meta: { outline },
+      });
+      setStep(project, "outline", "done");
+      await emit(outlineMsg);
+    }
+
+    if (!resume || !done("write")) {
+      project.status = "writing";
+      setStep(project, "write", "running");
+      const outline = project.outline;
+      for (let i = 0; i < outline.length; i += 1) {
+        if (project.chapters[i]?.status === "done") continue;
+        project.currentChapterIndex = i;
+        project.chapters[i] = { ...project.chapters[i], status: "writing" };
+        command(
+          project,
+          `quill write --chapter ${outline[i].number} --pages ${outline[i].targetPages}`,
+          `Composing ${outline[i].title}`
+        );
+
+        let chapterText: string | null = null;
+        const usedSources = project.sources.filter((s) => outline[i].sourceIds.includes(s.id));
+        if (llmConfigured()) {
+          try {
+            chapterText = await llmWriteChapter({
+              topic: project.topic,
+              section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
+              sources: usedSources.map((s) => ({
+                title: s.title,
+                year: s.year,
+                authors: s.authors,
+                venue: s.venue,
+                doi: s.doi,
+                abstract: s.abstract,
+              })),
+              style: project.citationStyle,
+              documentType: project.documentType,
+              targetWords: outline[i].targetPages * 280,
+            });
+          } catch (error) {
+            command(project, `quill llm --chapter ${outline[i].number}`, String(error instanceof Error ? error.message : "LLM failed"), "error");
+          }
+        }
+        if (!chapterText?.trim()) {
+          chapterText = null;
+        }
+
+        const effectiveText = chapterText || "";
+        const wordCount = effectiveText.split(/\s+/).filter(Boolean).length;
+        const pageEstimate = Math.max(1, Math.round(wordCount / 280));
+        project.chapters[i] = {
+          id: outline[i].id,
+          number: outline[i].number,
+          title: outline[i].title,
+          summary: outline[i].summary,
+          blocks: effectiveText ? [{ heading: outline[i].title, level: 1, paragraphs: [effectiveText] }] : [],
+          wordCount,
+          pageEstimate,
+          sourceIds: chapterText ? usedSources.map((s) => s.id) : [],
+          status: chapterText ? "done" : "pending",
+        };
+        project.wordCount = wordCountOf(project.chapters.filter((c) => c.status === "done"));
+        project.pageEstimate = pageEstimateOf(project.chapters.filter((c) => c.status === "done"));
+        const progress = await say(project.chatId, {
+          role: "assistant",
+          kind: "progress",
+          content: `Chapter ${outline[i].number} complete: ${outline[i].title} (${wordCount.toLocaleString()} words, ~${pageEstimate} pages).`,
+          meta: {
+            chapter: {
+              number: outline[i].number,
+              title: outline[i].title,
+              wordCount,
+              pageEstimate,
+            },
+            done: i + 1,
+            total: outline.length,
+            wordCount: project.wordCount,
+            pageEstimate: project.pageEstimate,
+          },
+        });
+        await emit(progress);
+      }
+      setStep(project, "write", "done");
+    }
+
+    if (!resume || !done("consistency")) {
+      setStep(project, "consistency", "running");
+      command(project, "quill lint --terms --numbering --aims", "Terminology and chapter numbering aligned.");
+      setStep(project, "consistency", "done");
+    }
+    if (!resume || !done("citations")) {
+      setStep(project, "citations", "running");
+      project.bibliography = bibliography(project.sources, project.citationStyle);
+      command(project, `quill cite --style ${project.citationStyle}`, `${project.bibliography.length} bibliography entries.`);
+      setStep(project, "citations", "done");
+    }
     setStep(project, "frontmatter", "done");
     await emit();
 
-    project.status = "exporting";
-    setStep(project, "export", "running");
-    command(project, "quill export --format pdf,docx", "Rendering downloadable manuscript files.");
-    const [pdfBuf, docxBuf] = await Promise.all([buildPdf(project), buildDocx(project)]);
-    const stamp = nowIso().slice(0, 10);
-    const base = slug(project.topic).slice(0, 48) || "manuscript";
-    const pdfFile: ProjectFile = {
-      id: nid(),
-      name: `${base}-${stamp}.pdf`,
-      mime: "application/pdf",
-      format: "pdf",
-      size: pdfBuf.length,
-      pages: project.pageEstimate,
-      createdAt: nowIso(),
-    };
-    const docxFile: ProjectFile = {
-      id: nid(),
-      name: `${base}-${stamp}.docx`,
-      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      format: "docx",
-      size: docxBuf.length,
-      pages: project.pageEstimate,
-      createdAt: nowIso(),
-    };
-    await saveBinaryFile(pdfFile, pdfBuf);
-    await saveBinaryFile(docxFile, Buffer.from(docxBuf));
-    project.files = [pdfFile, docxFile];
-    setStep(project, "export", "done");
-    project.status = "complete";
-    project.wordCount = wordCountOf(project.chapters);
-    project.pageEstimate = pageEstimateOf(project.chapters);
-    command(project, "ls exports/", project.files.map((f) => `${f.name}  ${prettyBytes(f.size)}`).join("\n"));
+    if (!resume || !done("export")) {
+      project.status = "exporting";
+      setStep(project, "export", "running");
+      command(project, "quill export --format pdf,docx", "Rendering downloadable manuscript files.");
+      const [pdfBuf, docxBuf] = await Promise.all([buildPdf(project), buildDocx(project)]);
+      const stamp = nowIso().slice(0, 10);
+      const base = slug(project.topic).slice(0, 48) || "manuscript";
+      const pdfFile: ProjectFile = {
+        id: nid(),
+        name: `${base}-${stamp}.pdf`,
+        mime: "application/pdf",
+        format: "pdf",
+        size: pdfBuf.length,
+        pages: project.pageEstimate,
+        createdAt: nowIso(),
+      };
+      const docxFile: ProjectFile = {
+        id: nid(),
+        name: `${base}-${stamp}.docx`,
+        mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        format: "docx",
+        size: docxBuf.length,
+        pages: project.pageEstimate,
+        createdAt: nowIso(),
+      };
+      await saveBinaryFile(pdfFile, pdfBuf);
+      await saveBinaryFile(docxFile, Buffer.from(docxBuf));
+      project.files = [pdfFile, docxFile];
+      setStep(project, "export", "done");
+      project.status = "complete";
+      project.wordCount = wordCountOf(project.chapters);
+      project.pageEstimate = pageEstimateOf(project.chapters);
+      command(project, "ls exports/", project.files.map((f) => `${f.name}  ${prettyBytes(f.size)}`).join("\n"));
 
-    const fileMsg = await say(project.chatId, {
-      role: "assistant",
-      kind: "file",
-      content: `Manuscript ready. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download PDF or DOCX.`,
-      meta: { files: project.files, wordCount: project.wordCount, pageEstimate: project.pageEstimate },
-    });
-    await emit(fileMsg);
-    await upsertChat({
-      id: project.chatId,
-      title: project.topic.slice(0, 72),
-      createdAt: project.createdAt,
-      updatedAt: nowIso(),
-      projectId: project.id,
-    });
+      const fileMsg = await say(project.chatId, {
+        role: "assistant",
+        kind: "file",
+        content: `Manuscript ready. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download PDF or DOCX.`,
+        meta: { files: project.files, wordCount: project.wordCount, pageEstimate: project.pageEstimate },
+      });
+      await emit(fileMsg);
+      const existing = await getChat(project.chatId);
+      await upsertChat({
+        ...(existing || { id: project.chatId, title: project.topic.slice(0, 72), createdAt: project.createdAt, updatedAt: nowIso() }),
+        createdAt: project.createdAt,
+        updatedAt: nowIso(),
+        projectId: project.id,
+      });
+    }
     return project;
   } catch (error) {
     project.status = "error";

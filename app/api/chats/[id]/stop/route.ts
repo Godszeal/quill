@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-api";
-
-// In-memory abort registry keyed by chatId.
-// Works within a single serverless instance; sufficient to signal stop.
-export const abortRegistry = new Map<string, AbortController>();
+import { abortRegistry } from "@/lib/abort";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const auth = await requireAuth(req.headers);

@@ -107,14 +107,4 @@ export async function requireAuth(headers: Headers) {
   return { user: decoded.user };
 }
 
-export async function ensureChatOwnership(chatId: string, userId: string) {
-  const { getChat } = await import("./db");
-  const chat = await getChat(chatId);
-  if (!chat) return { error: "Chat not found", status: 404 };
-  if ((chat as any).userId && (chat as any).userId !== userId) {
-    return { error: "Forbidden", status: 403 };
-  }
-  return { chat };
-}
-
 export { hashPassword };

@@ -58,10 +58,10 @@ export function Studio() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
-  const scroller = useRef<HTMLDivElement>(null);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const [typingChars, setTypingChars] = useState(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   const resolvedTheme = (() => {
@@ -521,7 +521,7 @@ export function Studio() {
           </aside>
         )}
 
-        <main className="flex-1 flex flex-col relative min-w-0">
+        <main className="flex-1 flex flex-col relative min-w-0" style={{ backgroundColor: bg }}>
           <header className="h-16 border-b flex items-center justify-between px-4 sm:px-6 shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <button className="lg:hidden p-2 mr-2 transition-colors" onClick={() => setSidebar(!sidebar)} style={{ color: textSecondary }}>
@@ -559,7 +559,7 @@ export function Studio() {
             </div>
           </header>
 
-          <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+          <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8" style={{ scrollBehavior: "smooth" }}>
             <div className="mx-auto max-w-3xl w-full">
               {!messages.length && !busy ? (
                 <EmptyState isDark={isDark} onPick={(t) => submit(undefined, t)} />
@@ -669,143 +669,6 @@ export function Studio() {
               )}
             </div>
           </div>
-
-          {settingsOpen && (
-            <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: bg }}>
-              <div className="h-16 border-b flex items-center justify-between px-4 sm:px-6" style={{ borderColor }}>
-                <button onClick={() => setSettingsOpen(false)} className="transition-colors" style={{ color: textSecondary }}>
-                  Back
-                </button>
-                <span className="text-sm font-semibold" style={{ color: textPrimary }}>
-                  Settings
-                </span>
-                <div className="w-8" />
-              </div>
-              <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Appearance
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {["light", "dark", "system"].map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => {
-                          setTheme(t as "light" | "dark" | "system");
-                          localStorage.setItem("quill_theme", t);
-                        }}
-                        className="rounded-lg py-2 text-sm font-medium transition-colors"
-                        style={{
-                          color: theme === t ? "white" : textPrimary,
-                          backgroundColor: theme === t ? "#3b82f6" : "transparent",
-                          border: `1px solid ${borderColor}`,
-                        }}
-                      >
-                        {t === "light" ? "Light" : t === "dark" ? "Dark" : "System"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Document type
-                  </p>
-                  <SelectField
-                    label="Type"
-                    value={documentType}
-                    onChange={(v) => setDocumentType(v as DocumentType)}
-                    options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
-                    isDark={isDark}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Citation style
-                  </p>
-                  <SelectField
-                    label="Style"
-                    value={citationStyle}
-                    onChange={(v) => setCitationStyle(v as CitationStyle)}
-                    options={CITATION_STYLES}
-                    isDark={isDark}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Target pages
-                  </p>
-                  <SelectField
-                    label="Pages"
-                    value={targetPages}
-                    onChange={setTargetPages}
-                    options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
-                    isDark={isDark}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Author
-                  </p>
-                  <input
-                    value={authorName}
-                    onChange={(e) => setAuthorName(e.target.value)}
-                    placeholder="Author name"
-                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6]"
-                    style={{
-                      backgroundColor: inputBg,
-                      borderColor,
-                      color: textPrimary,
-                    }}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Institution
-                  </p>
-                  <input
-                    value={institution}
-                    onChange={(e) => setInstitution(e.target.value)}
-                    placeholder="Institution / university"
-                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6]"
-                    style={{
-                      backgroundColor: inputBg,
-                      borderColor,
-                      color: textPrimary,
-                    }}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
-                    Mode
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setMode("write")}
-                      className="rounded-lg py-2 text-sm font-medium transition-colors"
-                      style={{
-                        color: mode === "write" ? "white" : textPrimary,
-                        backgroundColor: mode === "write" ? "#3b82f6" : "transparent",
-                        border: `1px solid ${borderColor}`,
-                      }}
-                    >
-                      Write
-                    </button>
-                    <button
-                      onClick={() => setMode("research")}
-                      className="rounded-lg py-2 text-sm font-medium transition-colors"
-                      style={{
-                        color: mode === "research" ? "white" : textPrimary,
-                        backgroundColor: mode === "research" ? "#3b82f6" : "transparent",
-                        border: `1px solid ${borderColor}`,
-                      }}
-                    >
-                      Journals
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )})
 
           <footer className="h-auto p-4 sm:p-6 border-t shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
             <div className="mx-auto max-w-3xl w-full">

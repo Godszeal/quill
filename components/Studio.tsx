@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   BookMarked,
   ChevronRight,
   EllipsisVertical,
   Loader2,
-  LogOut,
   Menu,
   Moon,
   Plus,
@@ -69,7 +67,6 @@ export function Studio() {
   const [modal, setModal] = useState<{ type: "confirm" | null; title: string; content: string; onConfirm: () => void; onCancel: () => void } | null>(null);
   const [stopping, setStopping] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const router = useRouter();
 
   const resolvedTheme = (() => {
     if (typeof window === "undefined") return "light";
@@ -97,11 +94,6 @@ export function Studio() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleSignout = async () => {
-    await fetch("/api/auth/signout", { method: "POST" });
-    router.replace("/auth/signin");
-  };
 
   const showToast = (message: string, type: "info" | "success" | "error" = "info") => {
     const id = Math.random().toString(36).slice(2);

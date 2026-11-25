@@ -89,7 +89,13 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
   const emit = async (message?: ChatMessage) => {
     project.updatedAt = nowIso();
     await upsertProject(project);
-    if (onTick) await onTick(project, message);
+    if (onTick) {
+      try {
+        await onTick(project, message);
+      } catch {
+        // Client disconnected or stream closed; continue pipeline locally
+      }
+    }
   };
 
   const done = (id: PipelineStep["id"]) => project.steps.find((s) => s.id === id)?.status === "done";

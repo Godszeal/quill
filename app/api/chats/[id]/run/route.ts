@@ -98,8 +98,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const stream = new ReadableStream({
       async start(controller) {
+        let closed = false;
         const send = (payload: unknown) => {
-          controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
+          } catch {
+            closed = true;
+          }
         };
         try {
           send({ type: "start", projectId: project.id });
@@ -114,7 +120,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         } catch (error) {
           send({ type: "error", error: error instanceof Error ? error.message : "Failed" });
         } finally {
-          controller.close();
+          if (!closed) {
+            try {
+              controller.close();
+            } catch {
+              // already closed
+            }
+            closed = true;
+          }
         }
       },
     });

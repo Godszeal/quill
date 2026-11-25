@@ -625,14 +625,6 @@ export function Studio() {
               >
                 <EllipsisVertical className="w-5 h-5" style={{ color: textPrimary }} />
               </button>
-              <button
-                onClick={handleSignout}
-                className="p-2 rounded-full transition-colors hover:bg-[#ef4444] hover:text-white"
-                aria-label="Sign out"
-                style={{ color: textPrimary }}
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
             </div>
           </header>
 

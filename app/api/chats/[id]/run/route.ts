@@ -5,7 +5,7 @@ import { createProjectDraft, runPipeline } from "@/lib/pipeline";
 import type { CitationStyle, DocumentType } from "@/lib/types";
 import { harvestSources } from "@/lib/research";
 import { requireAuth } from "@/lib/auth-api";
-import { llmNameChat } from "@/lib/llm";
+import { llmNameChat, llmChat } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 
@@ -65,11 +65,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     if (mode === "chat") {
+      const reply = await llmChat(prompt);
       await addMessage(params.id, {
         id: nid(),
         role: "assistant",
         kind: "text",
-        content: helpText(),
+        content: reply,
         createdAt: nowIso(),
       });
       return NextResponse.json({ ok: true, mode });
@@ -124,8 +125,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 }
 
 function inferMode(prompt: string): Body["mode"] {
-  const q = prompt.toLowerCase();
-  if (/^(help|hi|hello|what can you do|how does this work)\b/.test(q)) return "chat";
+  const q = prompt.toLowerCase().trim();
+  if (/^(help|hi|hello|hey|what can you do|how does this work|who are you|what is quill)\b/.test(q)) return "chat";
+  if (q.length <= 40 && /^(ai|llm|chat|talk|converse|assistant|agent|you|your)\b/.test(q)) return "chat";
   if (/\b(find|search|latest journals?|papers? only|harvest)\b/.test(q) && q.length < 180) return "research";
   return "write";
 }
@@ -161,17 +163,4 @@ function slim(project: ReturnType<typeof createProjectDraft>) {
     targetPages: project.targetPages,
     error: project.error,
   };
-}
-
-function helpText() {
-  return [
-    "I am Quill, a long-form research writing agent.",
-    "Give me a topic, pick document type, citation style, and page length, then I will:",
-    "1. Harvest recent journals from OpenAlex and Crossref",
-    "2. Rank and deduplicate sources",
-    "3. Lock a consistent chapter outline",
-    "4. Write 20–150+ pages chapter by chapter",
-    "5. Assemble citations and export PDF + DOCX",
-    "You can also ask me to search papers only, or start a new chat anytime.",
-  ].join("\n");
 }

@@ -66,7 +66,7 @@ export async function llmWriteChapter(params: {
   ].join("\n");
 
   const completion = await c.chat.completions.create({
-    model: process.env.USER_LLM_MODEL || "nvidia/nemotron-4-340b-reward",
+    model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.4,
     max_tokens: 3000,
@@ -105,5 +105,30 @@ export async function llmNameChat(prompt: string): Promise<string> {
     return title.trim().slice(0, 72) || prompt.slice(0, 72);
   } catch {
     return prompt.slice(0, 72);
+  }
+}
+
+export async function llmChat(message: string): Promise<string> {
+  const c = getClient();
+  if (!c) {
+    return "I'm Quill, your research writing agent. To give you real AI responses, please set the USER_LLM_API_KEY environment variable on Vercel (your NVIDIA API key). Without it, I use template-based writing.\n\nTo get started, give me a topic (e.g., \"Renewable energy microgrids in sub-Saharan Africa\"), pick your document type and citation style, and I'll write a full manuscript with sources, outline, chapters, and PDF/DOCX export.";
+  }
+  try {
+    const completion = await c.chat.completions.create({
+      model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Quill, a helpful research writing assistant. Keep responses concise, friendly, and focused on academic writing. If the user wants to write a manuscript, ask for their topic, document type, citation style, and target pages.",
+        },
+        { role: "user", content: message },
+      ],
+      temperature: 0.5,
+      max_tokens: 500,
+    });
+    return completion.choices[0]?.message?.content || "";
+  } catch (error) {
+    return `I couldn't reach the LLM (${error instanceof Error ? error.message : "unknown error"}). Please check your USER_LLM_API_KEY and try again.`;
   }
 }

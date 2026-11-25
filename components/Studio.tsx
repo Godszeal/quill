@@ -22,6 +22,8 @@ import type { Chat, ChatMessage, CitationStyle, DocumentType, Project } from "@/
 import { SelectField } from "./SelectField";
 import { MarkdownText } from "./MarkdownText";
 import { CommandCard, extraFor } from "./MessageCards";
+import { Toast } from "./Toast";
+import { ConfirmModal } from "./ConfirmModal";
 
 type SlimProject = Pick<
   Project,
@@ -62,6 +64,11 @@ export function Studio() {
   const [typingChars, setTypingChars] = useState(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const abortController = useRef<AbortController | null>(null);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: "info" | "success" | "error" }>>([]);
+  const [modal, setModal] = useState<{ type: "confirm" | null; title: string; content: string; onConfirm: () => void; onCancel: () => void } | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const router = useRouter();
 
   const resolvedTheme = (() => {
@@ -96,6 +103,40 @@ export function Studio() {
     router.replace("/auth/signin");
   };
 
+  const showToast = (message: string, type: "info" | "success" | "error" = "info") => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => dismissToast(id), 5000);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const openConfirm = (title: string, content: string, onConfirm: () => void, onCancel: () => void) => {
+    setModal({ type: "confirm", title, content, onConfirm, onCancel });
+  };
+
+  const closeModal = () => {
+    setModal(null);
+  };
+
+  const stopChat = async () => {
+    if (abortController.current) {
+      abortController.current.abort();
+    }
+    try {
+      if (chatId) {
+        await fetch(`/api/chats/${chatId}/stop`, { method: "POST" });
+      }
+    } catch {
+      // ignore
+    }
+    setStopping(false);
+    setBusy(false);
+    showToast("Stopped", "info");
+  };
+
   const loadChats = async () => {
     const res = await fetch("/api/chats");
     const data = await res.json();
@@ -114,6 +155,7 @@ export function Studio() {
   };
 
   const newChat = async () => {
+    if (abortController.current) abortController.current.abort();
     const res = await fetch("/api/chats", { method: "POST" });
     const data = await res.json();
     await loadChats();
@@ -123,18 +165,33 @@ export function Studio() {
     setRenamingId(null);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
     setSettingsOpen(false);
+    setBusy(false);
+    setStopping(false);
   };
 
   const deleteChat = async (id: string) => {
-    if (!window.confirm("Delete this chat?")) return;
-    await fetch(`/api/chats/${id}`, { method: "DELETE" });
-    await loadChats();
-    if (chatId === id) {
-      const list = chats.filter((c) => c.id !== id);
-      if (list[0]) await openChat(list[0].id);
-      else await newChat();
-    }
-    setRenamingId(null);
+    setPendingDeleteId(id);
+    openConfirm(
+      "Delete chat",
+      "This chat and all its messages will be permanently deleted.",
+      async () => {
+        if (!pendingDeleteId) return;
+        await fetch(`/api/chats/${pendingDeleteId}`, { method: "DELETE" });
+        await loadChats();
+        if (chatId === pendingDeleteId) {
+          const list = chats.filter((c) => c.id !== pendingDeleteId);
+          if (list[0]) await openChat(list[0].id);
+          else await newChat();
+        }
+        setPendingDeleteId(null);
+        closeModal();
+        showToast("Chat deleted", "success");
+      },
+      () => {
+        setPendingDeleteId(null);
+        closeModal();
+      },
+    );
   };
 
   const renameChat = async (id: string, title: string) => {
@@ -184,7 +241,10 @@ export function Studio() {
   const submit = async (event?: React.FormEvent, preset?: string) => {
     event?.preventDefault();
     const text = (preset || prompt).trim();
-    if (!text || busy) return;
+    if (!text) return;
+    if (abortController.current) abortController.current.abort();
+    const ac = new AbortController();
+    abortController.current = ac;
     let id = chatId;
     if (!id) {
       const res = await fetch("/api/chats", { method: "POST" });
@@ -194,6 +254,7 @@ export function Studio() {
     }
     setPrompt("");
     setBusy(true);
+    setStopping(false);
     setMessages((m) => [
       ...m,
       { id: crypto.randomUUID(), role: "user", kind: "text", content: text, createdAt: new Date().toISOString() },
@@ -211,6 +272,7 @@ export function Studio() {
           institution,
           mode,
         }),
+        signal: ac.signal,
       });
       const ctype = res.headers.get("content-type") || "";
       if (ctype.includes("ndjson") && res.body) {
@@ -218,6 +280,10 @@ export function Studio() {
         const decoder = new TextDecoder();
         let buf = "";
         while (true) {
+          if (ac.signal.aborted) {
+            reader.cancel();
+            break;
+          }
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
@@ -240,8 +306,16 @@ export function Studio() {
         await openChat(id!);
       }
       await loadChats();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        showToast("Stopped", "info");
+      } else {
+        showToast(err instanceof Error ? err.message : "Request failed", "error");
+      }
     } finally {
       setBusy(false);
+      setStopping(false);
+      abortController.current = null;
       if (id) await openChat(id);
     }
   };
@@ -682,13 +756,15 @@ export function Studio() {
                     el.style.height = "auto";
                     el.style.height = `${el.scrollHeight}px`;
                   }}
-                  placeholder="Message Quill…"
+                  placeholder={busy ? "Writing in progress…" : "Message Quill…"}
                   className="flex-1 resize-none rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6] min-h-[48px] max-h-[160px]"
                   style={{
                     backgroundColor: inputBg,
                     borderColor,
                     color: textPrimary,
+                    opacity: busy ? 0.5 : 1,
                   }}
+                  disabled={busy}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -696,25 +772,61 @@ export function Studio() {
                     }
                   }}
                 />
-                <button
-                  disabled={busy || !prompt.trim()}
-                  onClick={submit}
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors"
-                  style={{
-                    backgroundColor: busy || !prompt.trim() ? "#2a2a2a" : "#181818",
-                    color: busy || !prompt.trim() ? "#888888" : "white",
-                  }}
-                  aria-label="Send"
-                >
-                  {busy ? (
-                    <Loader2 className="w-5 h-5 animate-spin" style={{ color: "white" }} />
-                  ) : (
+                {busy ? (
+                  <button
+                    onClick={stopChat}
+                    disabled={stopping}
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                    style={{
+                      backgroundColor: stopping ? "#2a2a2a" : "#b91c1c",
+                      color: stopping ? "#888888" : "white",
+                    }}
+                    aria-label="Stop"
+                  >
+                    {stopping ? (
+                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: "white" }} />
+                    ) : (
+                      <span style={{ fontWeight: "bold", fontSize: "14px" }}>⏹</span>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    disabled={!prompt.trim()}
+                    onClick={submit}
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                    style={{
+                      backgroundColor: !prompt.trim() ? "#2a2a2a" : "#181818",
+                      color: !prompt.trim() ? "#888888" : "white",
+                    }}
+                    aria-label="Send"
+                  >
                     <Send className="w-5 h-5" />
-                  )}
-                </button>
+                  </button>
+                )}
               </div>
             </div>
           </footer>
+
+          {/* Toasts */}
+          <div className="pointer-events-none">
+            {toasts.map((t) => (
+              <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
+            ))}
+          </div>
+
+          {/* Confirm Modal */}
+          {modal && (
+            <ConfirmModal
+              open={true}
+              title={modal.title}
+              content={modal.content}
+              confirmLabel="Delete"
+              cancelLabel="Cancel"
+              onConfirm={modal.onConfirm}
+              onCancel={modal.onCancel}
+              isDark={isDark}
+            />
+          )}
         </main>
       </div>
     </>

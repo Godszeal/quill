@@ -438,25 +438,84 @@ export function Studio() {
                 <Plus className="w-4 h-4" style={{ color: textPrimary }} /> New chat
               </button>
               <div className="space-y-1">
-                {chats.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      openChat(c.id);
-                      setSidebar(false);
-                    }}
-                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
-                      c.id === chatId ? `bg-[#3b82f6] text-white` : `bg-transparent hover:bg-[${hoverBg}]`
-                    }`}
-                    style={{
-                      color: c.id === chatId ? "white" : textPrimary,
-                    }}
-                  >
-                    <p className="truncate text-sm" style={{ color: textPrimary }}>
-                      {c.title}
-                    </p>
-                  </button>
-                ))}
+                {chats.map((c) => {
+                  const isRenaming = renamingId === c.id;
+                  if (isRenaming) {
+                    return (
+                      <div key={c.id} className="relative">
+                        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#3b82f6]">
+                          <input
+                            autoFocus
+                            defaultValue={c.title}
+                            className="flex-1 text-sm font-medium border-none outline-none bg-transparent"
+                            value={renameTitle}
+                            onChange={(e) => setRenameTitle(e.target.value)}
+                            onBlur={() => renameChat(c.id, renameTitle || c.title)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") renameChat(c.id, renameTitle || c.title);
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            style={{ color: textPrimary }}
+                          />
+                          <button
+                            onClick={() => setRenamingId(null)}
+                            className="p-1 transition-colors"
+                            style={{ color: textSecondary }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={c.id} className="relative group">
+                      <button
+                        onClick={() => {
+                          openChat(c.id);
+                          setSidebar(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                          c.id === chatId ? `bg-[#3b82f6] text-white` : `bg-transparent hover:bg-[${hoverBg}]`
+                        }`}
+                        style={{
+                          color: c.id === chatId ? "white" : textPrimary,
+                        }}
+                      >
+                        <p className="truncate text-sm font-medium" style={{ color: textPrimary }}>
+                          {c.title}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingId(c.id);
+                              setRenameTitle(c.title);
+                            }}
+                            className="p-1 transition-colors hover:bg-black/10 dark:hover:bg-white/10 rounded-lg"
+                            style={{ color: textSecondary }}
+                            aria-label="Rename"
+                          >
+                            <span className="w-3 h-3" style={{ color: textSecondary }}>
+                              ✎
+                            </span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteChat(c.id);
+                            }}
+                            className="p-1 transition-colors hover:bg-black/10 dark:hover:bg-white/10 rounded-lg"
+                            style={{ color: textSecondary }}
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" style={{ color: textSecondary }} />
+                          </button>
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </aside>

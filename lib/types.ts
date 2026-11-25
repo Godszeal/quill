@@ -64,6 +64,36 @@ export interface OutlineSection {
 
 export type ChapterBlockLevel = 1 | 2 | 3;
 
+export type FileType = "pdf" | "docx" | "both";
+
+export interface PollOption {
+  id: string;
+  text: string;
+  votes: number;
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: PollOption[];
+  createdAt: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface Suggestion {
+  id: string;
+  question: string;
+  answers: string[];
+  selectedAnswer?: string;
+  createdAt: string;
+}
+
 export interface ChapterBlock {
   heading: string;
   level: ChapterBlockLevel;
@@ -118,7 +148,10 @@ export interface ChatMessage {
     | "progress"
     | "file"
     | "command"
-    | "error";
+    | "error"
+    | "suggestion"
+    | "poll"
+    | "task";
   content: string;
   createdAt: string;
   meta?: Record<string, unknown>;
@@ -153,6 +186,10 @@ export interface Project {
   steps: PipelineStep[];
   wordCount: number;
   pageEstimate: number;
+  fileType: FileType;
+  tasks: Task[];
+  polls: Poll[];
+  suggestions: Suggestion[];
   createdAt: string;
   updatedAt: string;
   error?: string;

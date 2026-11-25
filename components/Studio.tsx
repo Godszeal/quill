@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   BookMarked,
   ChevronRight,
+  ChevronDown,
   EllipsisVertical,
   Loader2,
   LogOut,
@@ -16,6 +17,7 @@ import {
   Sun,
   Trash2,
   X,
+  Check,
 } from "lucide-react";
 import { CITATION_STYLES, DOCUMENT_TYPES, PAGE_OPTIONS } from "@/lib/types";
 import type { Chat, ChatMessage, CitationStyle, DocumentType, Project } from "@/lib/types";
@@ -57,11 +59,15 @@ export function Studio() {
   const [authorName, setAuthorName] = useState("");
   const [institution, setInstitution] = useState("");
   const [mode, setMode] = useState<"write" | "research">("write");
+  const [fileType, setFileType] = useState<"pdf" | "docx" | "both">("both");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const [typingChars, setTypingChars] = useState(0);
+  const [thinkingOpen, setThinkingOpen] = useState<Record<string, boolean>>({});
+  const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
+  const [taskCompleted, setTaskCompleted] = useState<Record<string, boolean>>({});
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const abortController = useRef<AbortController | null>(null);
@@ -190,6 +196,20 @@ export function Studio() {
       abortController.current = null;
       await openChat(id);
     }
+  };
+
+  const toggleThinking = (messageId: string) => {
+    setThinkingOpen((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
+  };
+
+  const votePoll = (pollId: string, optionId: string) => {
+    setPollVotes((prev) => ({ ...prev, [pollId]: optionId }));
+    showToast("Vote recorded", "success");
+  };
+
+  const toggleTask = (taskId: string) => {
+    setTaskCompleted((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+    showToast("Task updated", "info");
   };
 
   const loadChats = async () => {
@@ -734,11 +754,181 @@ export function Studio() {
                             </span>
                           </div>
                           <div className="max-w-[92%] sm:max-w-[90%]">
-                            {m.kind !== "plan" ? (
+                            {m.kind === "suggestion" && m.meta && (
                               <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
-                                <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} isDark={isDark} />
-                                {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
-                                  <span className="blink inline-block w-1 h-[1.1em] ml-1" style={{ backgroundColor: textPrimary, verticalAlign: "middle" }} />
+                                <div className="mb-3">
+                                  <span className="text-xs font-medium" style={{ color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Quill suggests
+                                  </span>
+                                  <div className="mt-2 text-sm leading-relaxed" style={{ color: textPrimary }}>
+                                    “{m.content}”
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 sm:gap-3 flex-wrap">
+                                  {(m.meta as any).answers?.slice(0, 4).map((ans: string, i: number) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => {
+                                        setPollVotes((prev) => ({ ...prev, [m.id]: ans }));
+                                        showToast(`Selected: ${ans}`, "success");
+                                      }}
+                                      className={`px-3 py-1.5 rounded-full text-xs sm:text-sm border transition-colors ${
+                                        pollVotes[m.id] === ans
+                                          ? "bg-[#3b82f6] text-white border-[#3b82f6]"
+                                          : `border-${isDark ? "gray-600" : "gray-300"} text-${isDark ? "gray-300" : "gray-700"} hover:bg-${isDark ? "gray-800" : "gray-100"}`
+                                      }` as string}
+                                      style={{ borderColor: isDark ? "#4a4a4a" : "#d1d5db" }}
+                                    >
+                                      {ans}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                  <button
+                                    onClick={() => toggleThinking(m.id)}
+                                    className="text-xs sm:text-sm flex items-center gap-1 transition-colors"
+                                    style={{ color: "#3b82f6" }}
+                                  >
+                                    {thinkingOpen[m.id] ? "Hide thinking" : "Show thinking"}
+                                    <span className={`w-3 h-3 ${thinkingOpen[m.id] ? "rotate-180" : ""}`} style={{ transition: "transform 0.2s" }}>
+                                      <ChevronDown className="w-3 h-3" style={{ color: "#3b82f6" }} />
+                                    </span>
+                                  </button>
+                                  {thinkingOpen[m.id] && (
+                                    <div className="mt-2 pt-2 text-sm leading-relaxed" style={{ color: textSecondary, fontStyle: "italic" }}>
+                                      Consider how this question shapes your manuscript’s argument and structure.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {m.kind === "poll" && m.meta && (
+                              <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                                <div className="mb-3">
+                                  <span className="text-xs font-medium" style={{ color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Poll
+                                  </span>
+                                  <div className="mt-2 text-sm font-medium" style={{ color: textPrimary }}>
+                                    {m.content}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  {(m.meta as any).poll?.options.map((opt: any) => {
+                                    const voted = pollVotes[m.id] === opt.id;
+                                    const total = (m.meta as any).poll?.options?.reduce((s: number, o: any) => s + o.votes, 0) || 1;
+                                    const pct = Math.round(((opt.votes + (voted ? 1 : 0)) / Math.max(total, 1)) * 100);
+                                    return (
+                                      <div key={opt.id} className="flex items-center justify-between gap-3">
+                                        <button
+                                          onClick={() => votePoll(m.id, opt.id)}
+                                          disabled={!!pollVotes[m.id]}
+                                          className={`flex-1 px-3 py-2 rounded-lg border text-left transition-colors ${
+                                            voted
+                                              ? "bg-[#3b82f6] text-white border-[#3b82f6]"
+                                              : `border-${isDark ? "gray-600" : "gray-300"} text-${isDark ? "gray-300" : "gray-700"} hover:bg-${isDark ? "gray-800" : "gray-100"}`
+                                          }` as string}
+                                          style={{ borderColor: isDark ? "#4a4a4a" : "#d1d5db" }}
+                                        >
+                                          {opt.text}
+                                        </button>
+                                        <span className="text-[10px] sm:text-xs" style={{ color: textSecondary }}>
+                                          {opt.votes} vote{opt.votes !== 1 ? "s" : ""} ({pct}%)
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {pollVotes[m.id] && (
+                                  <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                    <span className="text-xs sm:text-sm" style={{ color: textSecondary }}>
+                                      You voted. Thanks for shaping the manuscript direction.
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {m.kind === "task" && m.meta && (
+                              <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                                <div className="mb-3">
+                                  <span className="text-xs font-medium" style={{ color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Tasks
+                                  </span>
+                                  <div className="mt-2 text-sm font-medium" style={{ color: textPrimary }}>
+                                    {m.content}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  {(m.meta as any).tasks?.map((t: any, i: number) => {
+                                    const done = taskCompleted[t.id];
+                                    return (
+                                      <div key={t.id} className="flex items-center gap-3">
+                                        <button
+                                          onClick={() => toggleTask(t.id)}
+                                          className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                                            done ? "bg-[#10b981] border-[#10b981]" : `border-${isDark ? "gray-600" : "gray-300"}`
+                                          }`}
+                                          style={{ borderColor: isDark ? "#4a4a4a" : "#d1d5db" }}
+                                        >
+                                          {done && (
+                                            <span className="w-2.5 h-2.5 text-white">
+                                              <Check className="w-2.5 h-2.5" />
+                                            </span>
+                                          )}
+                                        </button>
+                                        <span
+                                          className={`text-sm sm:text-base leading-relaxed transition-colors ${
+                                            done ? "line-through text-gray-500 dark:text-gray-400" : `text-${isDark ? "gray-300" : "gray-700"}`
+                                          }`}
+                                        >
+                                          {t.title}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                  <button
+                                    onClick={() => toggleThinking(m.id)}
+                                    className="text-xs sm:text-sm flex items-center gap-1 transition-colors"
+                                    style={{ color: "#3b82f6" }}
+                                  >
+                                    {thinkingOpen[m.id] ? "Hide details" : "Show details"}
+                                    <span className={`w-3 h-3 ${thinkingOpen[m.id] ? "rotate-180" : ""}`} style={{ transition: "transform 0.2s" }}>
+                                      <ChevronDown className="w-3 h-3" style={{ color: "#3b82f6" }} />
+                                    </span>
+                                  </button>
+                                  {thinkingOpen[m.id] && (
+                                    <div className="mt-2 pt-2 text-sm leading-relaxed" style={{ color: textSecondary, fontStyle: "italic" }}>
+                                      Check off tasks as you complete them. Quill will remember your progress.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {m.kind !== "suggestion" && m.kind !== "poll" && m.kind !== "task" && m.kind !== "plan" ? (
+                              <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} isDark={isDark} />
+                                  {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
+                                    <span className="blink inline-block w-1 h-[1.1em] ml-1" style={{ backgroundColor: textPrimary, verticalAlign: "middle" }} />
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => toggleThinking(m.id)}
+                                  className="text-xs sm:text-sm mt-2 flex items-center gap-1 transition-colors"
+                                  style={{ color: "#3b82f6" }}
+                                >
+                                  {thinkingOpen[m.id] ? "Collapse thinking" : "Show thinking"}
+                                  <span className={`w-3 h-3 ${thinkingOpen[m.id] ? "rotate-180" : ""}`} style={{ transition: "transform 0.2s" }}>
+                                    <ChevronDown className="w-3 h-3" style={{ color: "#3b82f6" }} />
+                                  </span>
+                                </button>
+                                {thinkingOpen[m.id] && (
+                                  <div className="mt-2 pt-2 border-t" style={{ borderColor: isDark ? "#2a2a2a" : "#e5e5e5" }}>
+                                    <div className="text-sm leading-relaxed" style={{ color: textSecondary, fontStyle: "italic" }}>
+                                      {m.content}
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             ) : null}
@@ -921,6 +1111,101 @@ export function Studio() {
               onCancel={modal.onCancel}
               isDark={isDark}
             />
+          )}
+
+          {/* Settings Panel */}
+          {settingsOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setSettingsOpen(false)}>
+              <div className="bg-[cardBg] border border-[borderColor] rounded-2xl p-6 sm:p-8 w-full sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto" style={{ backgroundColor: cardBg, borderColor }}>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold" style={{ color: textPrimary }}>
+                    Settings
+                  </h2>
+                  <button
+                    onClick={() => setSettingsOpen(false)}
+                    className="p-2 rounded-full hover:bg-[#2a2a2a] dark:hover:bg-gray-800 transition-colors"
+                    style={{ color: textPrimary }}
+                    aria-label="Close settings"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-5">
+                  <div>
+                    <SelectField
+                      label="Document type"
+                      value={documentType}
+                      onChange={(v) => setDocumentType(v as DocumentType)}
+                      options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
+                      isDark={isDark}
+                    />
+                  </div>
+                  <div>
+                    <SelectField
+                      label="Citation style"
+                      value={citationStyle}
+                      onChange={(v) => setCitationStyle(v as CitationStyle)}
+                      options={CITATION_STYLES.map((c) => ({ value: c.value, label: c.label }))}
+                      isDark={isDark}
+                    />
+                  </div>
+                  <div>
+                    <SelectField
+                      label="Target pages"
+                      value={targetPages}
+                      onChange={(v) => setTargetPages(v)}
+                      options={PAGE_OPTIONS.map((p) => ({ value: String(p), label: `${p} pages` }))}
+                      isDark={isDark}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-2" style={{ color: textSecondary }}>
+                      Export file type
+                    </label>
+                    <div className="flex gap-2">
+                      {(["pdf", "docx", "both"] as const).map((ft) => (
+                        <button
+                          key={ft}
+                          onClick={() => setFileType(ft)}
+                          className={`flex-1 py-2 rounded-lg border text-sm transition-colors ${
+                            fileType === ft
+                              ? "bg-[#3b82f6] text-white border-[#3b82f6]"
+                              : `border-${isDark ? "gray-600" : "gray-300"} text-${isDark ? "gray-300" : "gray-700"} hover:bg-${isDark ? "gray-800" : "gray-100"}`
+                          }`}
+                          style={{ borderColor: isDark ? "#4a4a4a" : "#d1d5db" }}
+                        >
+                          {ft.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-2" style={{ color: textSecondary }}>
+                      Author name
+                    </label>
+                    <input
+                      value={authorName}
+                      onChange={(e) => setAuthorName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border bg-transparent focus:ring-2 focus-ring-[#3b82f6] outline-none"
+                      style={{ borderColor, color: textPrimary }}
+                      placeholder="Author"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-2" style={{ color: textSecondary }}>
+                      Institution
+                    </label>
+                    <input
+                      value={institution}
+                      onChange={(e) => setInstitution(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border bg-transparent focus:ring-2 focus-ring-[#3b82f6] outline-none"
+                      style={{ borderColor, color: textPrimary }}
+                      placeholder="Institution"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </main>
       </div>

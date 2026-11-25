@@ -1,4 +1,4 @@
-import type { ChatMessage, CommandEvent, PipelineStep, Project, ProjectFile } from "./types";
+import type { ChatMessage, CommandEvent, FileType, PipelineStep, Poll, Project, ProjectFile, Suggestion, Task } from "./types";
 import { nid, nowIso } from "./ids";
 import { harvestSources } from "./research";
 import {
@@ -53,6 +53,7 @@ export function createProjectDraft(input: {
   targetPages: number;
   authorName: string;
   institution: string;
+  fileType?: FileType;
 }): Project {
   const timestamp = nowIso();
   return {
@@ -75,6 +76,10 @@ export function createProjectDraft(input: {
     steps: steps(),
     wordCount: 0,
     pageEstimate: 0,
+    fileType: input.fileType || "both",
+    tasks: [],
+    polls: [],
+    suggestions: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -125,6 +130,28 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       });
       setStep(project, "rank", "done");
       await emit(srcMsg);
+
+      // Suggest questions about the topic for the user to vote on / answer
+      const suggestedQuestions = [
+        `What is the primary research gap in “${project.topic}”?`,
+        `Which methodology best fits a ${project.documentType.replace("-", " ")} on this topic?`,
+        `How should the findings be structured across ${project.targetPages} pages?`,
+        `What are the key limitations to acknowledge?`,
+      ];
+      const suggestion: Suggestion = {
+        id: nid(),
+        question: suggestedQuestions[0],
+        answers: suggestedQuestions.slice(1),
+        createdAt: nowIso(),
+      };
+      project.suggestions = [suggestion];
+      await say(project.chatId, {
+        role: "assistant",
+        kind: "suggestion",
+        content: `Here is a key question to consider for your manuscript: “${suggestion.question}”`,
+        meta: { suggestion },
+      });
+      await emit();
     }
 
     if (!resume || !done("outline")) {
@@ -153,6 +180,27 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       });
       setStep(project, "outline", "done");
       await emit(outlineMsg);
+
+      // Poll: let user vote on chapter priority
+      const pollOptions = outline.map((s, i) => ({
+        id: nid(),
+        text: `Chapter ${i + 1}: ${s.title}`,
+        votes: 0,
+      }));
+      const poll: Poll = {
+        id: nid(),
+        question: "Which chapter should be prioritized first?",
+        options: pollOptions,
+        createdAt: nowIso(),
+      };
+      project.polls = [poll];
+      await say(project.chatId, {
+        role: "assistant",
+        kind: "poll",
+        content: "Vote on which chapter to prioritize:",
+        meta: { poll },
+      });
+      await emit();
     }
 
     if (!resume || !done("write")) {
@@ -232,6 +280,21 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
         await emit(progress);
       }
       setStep(project, "write", "done");
+
+      // Create follow-up tasks for the user
+      const tasks: Task[] = [
+        { id: nid(), title: "Review chapter outlines and confirm structure", completed: false, createdAt: nowIso() },
+        { id: nid(), title: "Select preferred export format (PDF / DOCX / both)", completed: false, createdAt: nowIso() },
+        { id: nid(), title: "Vote on chapter priority poll", completed: false, createdAt: nowIso() },
+      ];
+      project.tasks = tasks;
+      await say(project.chatId, {
+        role: "assistant",
+        kind: "task",
+        content: "Here are follow-up tasks you can track:",
+        meta: { tasks },
+      });
+      await emit();
     }
 
     if (!resume || !done("consistency")) {
@@ -251,31 +314,42 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
     if (!resume || !done("export")) {
       project.status = "exporting";
       setStep(project, "export", "running");
-      command(project, "quill export --format pdf,docx", "Rendering downloadable manuscript files.");
-      const [pdfBuf, docxBuf] = await Promise.all([buildPdf(project), buildDocx(project)]);
+      command(project, `quill export --format ${project.fileType}`, `Rendering downloadable manuscript files (${project.fileType}).`);
+      const files: ProjectFile[] = [];
       const stamp = nowIso().slice(0, 10);
       const base = slug(project.topic).slice(0, 48) || "manuscript";
-      const pdfFile: ProjectFile = {
-        id: nid(),
-        name: `${base}-${stamp}.pdf`,
-        mime: "application/pdf",
-        format: "pdf",
-        size: pdfBuf.length,
-        pages: project.pageEstimate,
-        createdAt: nowIso(),
-      };
-      const docxFile: ProjectFile = {
-        id: nid(),
-        name: `${base}-${stamp}.docx`,
-        mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        format: "docx",
-        size: docxBuf.length,
-        pages: project.pageEstimate,
-        createdAt: nowIso(),
-      };
-      await saveBinaryFile(pdfFile, pdfBuf);
-      await saveBinaryFile(docxFile, Buffer.from(docxBuf));
-      project.files = [pdfFile, docxFile];
+
+      if (project.fileType === "pdf" || project.fileType === "both") {
+        const pdfBuf = await buildPdf(project);
+        const pdfFile: ProjectFile = {
+          id: nid(),
+          name: `${base}-${stamp}.pdf`,
+          mime: "application/pdf",
+          format: "pdf",
+          size: pdfBuf.length,
+          pages: project.pageEstimate,
+          createdAt: nowIso(),
+        };
+        await saveBinaryFile(pdfFile, pdfBuf);
+        files.push(pdfFile);
+      }
+
+      if (project.fileType === "docx" || project.fileType === "both") {
+        const docxBuf = await buildDocx(project);
+        const docxFile: ProjectFile = {
+          id: nid(),
+          name: `${base}-${stamp}.docx`,
+          mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          format: "docx",
+          size: docxBuf.length,
+          pages: project.pageEstimate,
+          createdAt: nowIso(),
+        };
+        await saveBinaryFile(docxFile, Buffer.from(docxBuf));
+        files.push(docxFile);
+      }
+
+      project.files = files;
       setStep(project, "export", "done");
       project.status = "complete";
       project.wordCount = wordCountOf(project.chapters);
@@ -285,7 +359,7 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
       const fileMsg = await say(project.chatId, {
         role: "assistant",
         kind: "file",
-        content: `Manuscript ready. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download PDF or DOCX.`,
+        content: `Manuscript ready. ${project.wordCount.toLocaleString()} words, about ${project.pageEstimate} pages, ${project.sources.length} sources. Download ${project.files.map((f) => f.format.toUpperCase()).join(" / ")}.`,
         meta: { files: project.files, wordCount: project.wordCount, pageEstimate: project.pageEstimate },
       });
       await emit(fileMsg);

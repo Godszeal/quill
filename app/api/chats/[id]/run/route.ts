@@ -16,6 +16,7 @@ type Body = {
   targetPages?: number;
   authorName?: string;
   institution?: string;
+  fileType?: "pdf" | "docx" | "both";
   /** Optional. When "write" or omitted, server still infers so greetings stay chat. */
   mode?: "write" | "research" | "chat";
 };
@@ -92,6 +93,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       targetPages: clampPages(body.targetPages),
       authorName: body.authorName || "Author",
       institution: body.institution || "Institution",
+      fileType: body.fileType || "both",
     });
 
     const stream = new ReadableStream({

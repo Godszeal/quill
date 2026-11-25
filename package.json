@@ -16,7 +16,7 @@
     "nanoid": "^6.0.2",
     "next": "14.2.5",
     "openai": "^7.63.0",
-    "pdfkit": "^0.21.0",
+    "pdf-lib": "^1.17.1",
     "prism-react-renderer": "^2.1.0",
     "prismjs": "^1.29.0",
     "react": "^18",

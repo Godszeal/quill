@@ -4,6 +4,7 @@ import { nid, nowIso } from "@/lib/ids";
 import { createProjectDraft, runPipeline } from "@/lib/pipeline";
 import type { CitationStyle, DocumentType } from "@/lib/types";
 import { harvestSources } from "@/lib/research";
+import { requireAuth } from "@/lib/auth-api";
 import { llmNameChat, llmChat } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +20,17 @@ type Body = {
 };
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAuth(req.headers);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const chat = await getChat(params.id);
     if (!chat) return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    if ((chat as any).userId && (chat as any).userId !== auth.user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = (await req.json()) as Body;
     const prompt = (body.prompt || "").trim();

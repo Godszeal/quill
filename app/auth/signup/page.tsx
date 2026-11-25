@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import type { FormEvent } from "react";
+import { Suspense } from "react";
 
-export default function SignupPage() {
+function SignupPageContent() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -116,5 +117,13 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">Loading…</div>}>
+      <SignupPageContent />
+    </Suspense>
   );
 }

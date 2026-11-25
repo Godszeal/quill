@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import type { FormEvent } from "react";
+import { Suspense } from "react";
 
-export default function SigninPage() {
+function SigninPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
@@ -103,5 +104,13 @@ export default function SigninPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SigninPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#fafafa] px-4">Loading…</div>}>
+      <SigninPageContent />
+    </Suspense>
   );
 }

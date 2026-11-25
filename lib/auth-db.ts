@@ -1,6 +1,6 @@
 import { MongoClient, Db } from "mongodb";
 import { randomBytes } from "crypto";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth-api";
 
 let _authDb: Db | null = null;
 

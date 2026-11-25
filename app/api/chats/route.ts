@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listChats, upsertChat } from "@/lib/db";
 import { nid, nowIso } from "@/lib/ids";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-api";
 
 export const dynamic = "force-dynamic";
 

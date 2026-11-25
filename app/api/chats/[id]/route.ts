@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getChat, getProjectByChat, listMessages, usingMongo } from "@/lib/db";
 import { mcpConfigured } from "@/lib/mcp";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-api";
 
 export const dynamic = "force-dynamic";
 

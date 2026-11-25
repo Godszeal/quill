@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProject, readBinaryFile } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-api";
 
 export const dynamic = "force-dynamic";
 

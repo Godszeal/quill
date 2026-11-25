@@ -4,7 +4,7 @@ import { nid, nowIso } from "@/lib/ids";
 import { createProjectDraft, runPipeline } from "@/lib/pipeline";
 import type { CitationStyle, DocumentType } from "@/lib/types";
 import { harvestSources } from "@/lib/research";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-api";
 import { llmNameChat } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";

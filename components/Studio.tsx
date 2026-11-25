@@ -226,7 +226,10 @@ export function Studio() {
     if (!msg) return;
     const target = msg.content.length;
     if (typingChars >= target) return;
-    typingTimer.current = setTimeout(() => setTypingChars((c) => Math.min(c + 3, target)), 20);
+    const char = msg.content[typingChars];
+    const baseDelay = char.match(/[.,!?;:]/) ? 80 : char === "\n" ? 120 : 25;
+    const jitter = Math.floor(Math.random() * 40);
+    typingTimer.current = setTimeout(() => setTypingChars((c) => Math.min(c + 1, target)), baseDelay + jitter);
     return () => {
       if (typingTimer.current) clearTimeout(typingTimer.current);
     };
@@ -666,7 +669,7 @@ export function Studio() {
                               <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
                                 <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} isDark={isDark} />
                                 {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
-                                  <span className="animate-pulse inline-block w-1 h-[1em]" style={{ backgroundColor: textPrimary }} />
+                                  <span className="blink inline-block w-1 h-[1.1em] ml-1" style={{ backgroundColor: textPrimary, verticalAlign: "middle" }} />
                                 )}
                               </div>
                             ) : null}

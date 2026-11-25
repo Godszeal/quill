@@ -17,6 +17,8 @@
     "next": "14.2.5",
     "openai": "^7.63.0",
     "pdfkit": "^0.21.0",
+    "prism-react-renderer": "^2.1.0",
+    "prismjs": "^1.29.0",
     "react": "^18",
     "react-dom": "^18"
   },

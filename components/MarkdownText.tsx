@@ -1,20 +1,55 @@
 "use client";
 
+import { Highlight, themes } from "prism-react-renderer";
+import Prism from "prismjs";
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-python";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-markdown";
+import "prismjs/components/prism-css";
+import "prismjs/components/prism-html";
+import "prismjs/components/prism-java";
+import "prismjs/components/prism-c";
+import "prismjs/components/prism-cpp";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-rust";
+import "prismjs/components/prism-sql";
+import "prismjs/components/prism-yaml";
+import "prismjs/components/prism-docker";
+
 export function MarkdownText({ text, isDark }: { text: string; isDark?: boolean }) {
   const blocks = parseBlocks(text, isDark ?? false);
   const ink = isDark ? "#e5e5e5" : "#181818";
   const codeBg = isDark ? "#2a2a2a" : "#f2f2f2";
   const codeInk = isDark ? "#ffffff" : "#181818";
   const linkColor = isDark ? "#60a5fa" : "#2563eb";
-  const inlineCodeBg = isDark ? "#3a3a3a" : "#f2f2f2";
   return (
     <div className="space-y-4 leading-7 text-[14px]" style={{ color: ink }}>
       {blocks.map((block, i) => (
         <div key={i} className={block.className}>
           {block.type === "code" ? (
-            <pre className="relative overflow-hidden rounded-xl border p-4 text-xs font-mono leading-5" style={{ borderColor: codeBg, backgroundColor: codeBg, color: codeInk }}>
-              <code>{block.content}</code>
-            </pre>
+            <div className="relative overflow-hidden rounded-xl border p-0 mb-4" style={{ borderColor: codeBg }}>
+              <Highlight
+                prism={Prism}
+                theme={isDark ? themes.dracula : themes.oneLight}
+                language={block.language || "text"}
+                code={block.content}
+              >
+                {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                  <pre className={className} style={{ ...style, padding: "1rem", fontSize: "12px", lineHeight: 1.5, margin: 0 }}>
+                    {tokens.map((line, i) => (
+                      <div key={i} {...getLineProps({ line, key: i })}>
+                        {line.map((token, key) => (
+                          <span key={key} {...getTokenProps({ token, key })} />
+                        ))}
+                      </div>
+                    ))}
+                  </pre>
+                )}
+              </Highlight>
+            </div>
           ) : block.type === "heading" ? (
             <h3 className={block.level === 1 ? "text-xl font-bold mb-2" : "text-lg font-semibold mb-2"} dangerouslySetInnerHTML={{ __html: block.content }} style={{ color: ink }} />
           ) : (
@@ -26,8 +61,8 @@ export function MarkdownText({ text, isDark }: { text: string; isDark?: boolean 
   );
 }
 
-function parseBlocks(text: string, isDark: boolean = false): Array<{ type: string; content: string; className: string; level?: number }> {
-  const blocks: Array<{ type: string; content: string; className: string; level?: number }> = [];
+function parseBlocks(text: string, isDark: boolean): Array<{ type: string; content: string; className: string; level?: number; language?: string }> {
+  const blocks: Array<{ type: string; content: string; className: string; level?: number; language?: string }> = [];
   const lines = text.split("\n");
   let i = 0;
 
@@ -35,6 +70,8 @@ function parseBlocks(text: string, isDark: boolean = false): Array<{ type: strin
     const line = lines[i];
 
     if (line.startsWith("```")) {
+      const fence = line.trim();
+      const language = fence.replace(/^```+/i, "").trim() || "text";
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i].startsWith("```")) {
@@ -42,7 +79,7 @@ function parseBlocks(text: string, isDark: boolean = false): Array<{ type: strin
         i++;
       }
       i++;
-      blocks.push({ type: "code", content: codeLines.join("\n"), className: "" });
+      blocks.push({ type: "code", content: codeLines.join("\n"), className: "", language });
       continue;
     }
 
@@ -82,7 +119,7 @@ function parseBlocks(text: string, isDark: boolean = false): Array<{ type: strin
   }
 
   if (blocks.length === 0) {
-      blocks.push({ type: "paragraph", content: inlineMarkdown(text, isDark), className: "" });
+    blocks.push({ type: "paragraph", content: inlineMarkdown(text, isDark), className: "" });
   }
 
   return blocks;

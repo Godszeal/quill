@@ -110,25 +110,59 @@ export async function llmNameChat(prompt: string): Promise<string> {
 
 export async function llmChat(message: string): Promise<string> {
   const c = getClient();
-  if (!c) {
-    return "I'm Quill, your research writing agent. To give you real AI responses, please set the USER_LLM_API_KEY environment variable on Vercel (your NVIDIA API key). Without it, I use template-based writing.\n\nTo get started, give me a topic (e.g., \"Renewable energy microgrids in sub-Saharan Africa\"), pick your document type and citation style, and I'll write a full manuscript with sources, outline, chapters, and PDF/DOCX export.";
+  if (c) {
+    try {
+      const completion = await c.chat.completions.create({
+        model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Quill, a helpful research writing assistant. Keep responses concise, friendly, and focused on academic writing. If the user wants to write a manuscript, ask for their topic, document type, citation style, and target pages.",
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.5,
+        max_tokens: 500,
+      });
+      const text = completion.choices[0]?.message?.content || "";
+      if (text) return text;
+    } catch (error: any) {
+      const msg = error?.message || error?.toString() || "unknown error";
+      // Fall through to cantrustai fallback
+    }
   }
+
+  // Fallback: cantrustai.xyz Claude Haiku
   try {
-    const completion = await c.chat.completions.create({
-      model: process.env.USER_LLM_MODEL || "nvidia/nemotron-3.5-super-vl-120b-a12b",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are Quill, a helpful research writing assistant. Keep responses concise, friendly, and focused on academic writing. If the user wants to write a manuscript, ask for their topic, document type, citation style, and target pages.",
-        },
-        { role: "user", content: message },
-      ],
-      temperature: 0.5,
-      max_tokens: 500,
+    const fallbackRes = await fetch("https://api.cantrustai.xyz/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer ctai_dsoiueU0_qwTrhTgbX8KAy6PuzhgmJLB5n03MvE8q",
+      },
+      body: JSON.stringify({
+        model: "anthropic/claude-haiku-5.5",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Quill, a helpful research writing assistant. Keep responses concise, friendly, and focused on academic writing. If the user wants to write a manuscript, ask for their topic, document type, citation style, and target pages.",
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.5,
+        max_tokens: 500,
+      }),
     });
-    return completion.choices[0]?.message?.content || "";
-  } catch (error) {
-    return `I couldn't reach the LLM (${error instanceof Error ? error.message : "unknown error"}). Please check your USER_LLM_API_KEY and try again.`;
+    if (!fallbackRes.ok) {
+      const errText = await fallbackRes.text().catch(() => "");
+      throw new Error(`Fallback LLM failed (${fallbackRes.status}): ${errText}`);
+    }
+    const data = await fallbackRes.json();
+    return data.choices?.[0]?.message?.content || "";
+  } catch (error: any) {
+    const msg = error?.message || error?.toString() || "unknown error";
+    throw new Error(`LLM request failed: ${msg}`);
   }
 }

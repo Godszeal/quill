@@ -177,6 +177,23 @@ export async function getProjectByChat(chatId: string): Promise<Project | null> 
   return fileCache?.projects.find((p) => p.chatId === chatId) || null;
 }
 
+export async function deleteChat(id: string) {
+  const db = await connectMongo();
+  if (db) {
+    await db.collection("chats").deleteOne({ id });
+    await db.collection("messages").deleteMany({ chatId: id });
+    await db.collection("projects").deleteOne({ chatId: id });
+    return;
+  }
+  await ensureFileStore();
+  if (fileCache) {
+    fileCache.chats = fileCache.chats.filter((c) => c.id !== id);
+    fileCache.messages = fileCache.messages.filter((m) => m.chatId !== id);
+    fileCache.projects = fileCache.projects.filter((p) => p.chatId !== id);
+    await persistFileStore();
+  }
+}
+
 export async function upsertProject(project: Project) {
   const db = await connectMongo();
   if (db) {

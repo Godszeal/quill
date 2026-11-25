@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookMarked,
@@ -9,10 +9,11 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Moon,
   Plus,
-  Search,
   Send,
   Sparkles,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
@@ -53,17 +54,47 @@ export function Studio() {
   const [targetPages, setTargetPages] = useState("40");
   const [authorName, setAuthorName] = useState("");
   const [institution, setInstitution] = useState("");
-const [mode, setMode] = useState<"write" | "research">("write");
-const scroller = useRef<HTMLDivElement>(null);
-const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
-const [typingChars, setTypingChars] = useState(0);
-const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-const router = useRouter();
+  const [mode, setMode] = useState<"write" | "research">("write");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
+  const scroller = useRef<HTMLDivElement>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [typingChars, setTypingChars] = useState(0);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
 
-const handleSignout = async () => {
-  await fetch("/api/auth/signout", { method: "POST" });
-  router.replace("/auth/signin");
-};
+  const resolvedTheme = (() => {
+    if (typeof window === "undefined") return "light";
+    if (theme === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return theme;
+  })();
+
+  const isDark = resolvedTheme === "dark";
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  }, [isDark]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("quill_theme");
+    if (saved === "light" || saved === "dark" || saved === "system") {
+      setTheme(saved);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSignout = async () => {
+    await fetch("/api/auth/signout", { method: "POST" });
+    router.replace("/auth/signin");
+  };
 
   const loadChats = async () => {
     const res = await fetch("/api/chats");
@@ -74,6 +105,7 @@ const handleSignout = async () => {
 
   const openChat = async (id: string) => {
     setChatId(id);
+    setRenamingId(null);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
     const res = await fetch(`/api/chats/${id}`);
     const data = await res.json();
@@ -88,6 +120,7 @@ const handleSignout = async () => {
     setMessages([]);
     setProject(null);
     setChatId(data.chat.id);
+    setRenamingId(null);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
     setSettingsOpen(false);
   };
@@ -101,6 +134,17 @@ const handleSignout = async () => {
       if (list[0]) await openChat(list[0].id);
       else await newChat();
     }
+    setRenamingId(null);
+  };
+
+  const renameChat = async (id: string, title: string) => {
+    await fetch(`/api/chats/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    await loadChats();
+    setRenamingId(null);
   };
 
   useEffect(() => {
@@ -137,7 +181,7 @@ const handleSignout = async () => {
     };
   }, []);
 
-  const submit = async (event?: FormEvent, preset?: string) => {
+  const submit = async (event?: React.FormEvent, preset?: string) => {
     event?.preventDefault();
     const text = (preset || prompt).trim();
     if (!text || busy) return;
@@ -202,353 +246,579 @@ const handleSignout = async () => {
     }
   };
 
+  const bg = isDark ? "#0a0a0a" : "#fafafa";
+  const cardBg = isDark ? "#161616" : "#ffffff";
+  const borderColor = isDark ? "#2a2a2a" : "#e5e5e5";
+  const textPrimary = isDark ? "#ffffff" : "#181818";
+  const textSecondary = isDark ? "#a1a1aa" : "#666666";
+  const hoverBg = isDark ? "#262626" : "#f2f2f2";
+  const inputBg = isDark ? "#1f1f1f" : "#fafafa";
+  const sidebarBg = isDark ? "#111111" : "#ffffff";
+  const activeBg = isDark ? "#262626" : "#f2f2f2";
+
   return (
-    <div className="flex h-[100dvh] bg-[#fafafa] text-[#181818]">
-      {/* Sidebar - Desktop */}
-      <aside
-        className={`hidden lg:flex flex-col w-72 border-r border-[#e5e5e5] bg-white z-20 transition-all duration-300 ${
-          sidebar ? "" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <div className="h-16 flex items-center justify-between px-4 border-b border-[#e5e5e5] bg-white shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#181818] flex items-center justify-center">
-              <span className="text-[10px] font-bold text-white">Q</span>
+    <>
+      <div className="flex h-[100dvh] min-h-screen" style={{ backgroundColor: bg, color: textPrimary }}>
+        <aside
+          className="hidden lg:flex flex-col w-72 border-r z-20 transition-all duration-300"
+          style={{
+            backgroundColor: sidebar ? sidebarBg : "transparent",
+            borderColor,
+            color: textPrimary,
+            transform: sidebar ? "translateX(0)" : "translateX(-100%)",
+          }}
+        >
+          <div className="h-16 flex items-center justify-between px-4 border-b shrink-0" style={{ borderColor }}>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: textPrimary }}>
+                <span className="text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>
+                  Q
+                </span>
+              </div>
+              <span className="text-sm font-semibold tracking-tight" style={{ color: textPrimary }}>
+                Quill
+              </span>
             </div>
-            <span className="text-sm font-semibold tracking-tight">Quill</span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="flex items-center justify-between px-2">
             <button
-              onClick={newChat}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium hover:bg-[#f2f2f2] transition-colors"
+              onClick={() => {
+                const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+                setTheme(next);
+                localStorage.setItem("quill_theme", next);
+              }}
+              className="p-2 rounded-full transition-colors"
+              aria-label="Toggle theme"
+              style={{
+                backgroundColor: hoverBg,
+                color: textPrimary,
+              }}
             >
-              <Plus className="w-4 h-4" /> New chat
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            {chats.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => openChat(c.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  deleteChat(c.id);
-                }}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
-                  c.id === chatId
-                    ? "bg-[#f2f2f2] text-[#181818]"
-                    : "text-[#666] hover:bg-[#f2f2f2]"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{c.title}</p>
-                  <p className="truncate text-[10px] text-[#888] mt-0.5">{new Date(c.updatedAt).toLocaleDateString()}</p>
-                </div>
-                <EllipsisVertical className="w-4 h-4 opacity-0 group-hover:opacity-100 text-[#666]" />
-              </button>
-            ))}
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile sidebar overlay */}
-      {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
-        <div className="lg:hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-sm" onClick={() => setSidebar(false)} />
-      )}
-      {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
-        <aside className="lg:hidden fixed left-0 top-0 z-40 w-[85vw] max-w-md h-full bg-white border-r border-[#e5e5e5] shadow-xl transform transition-transform duration-300 flex flex-col">
-          <div className="h-12 flex items-center justify-between px-4 border-b border-[#e5e5e5] shrink-0">
-            <span className="font-semibold text-sm">Chats</span>
-            <button onClick={() => setSidebar(false)} className="text-[#666] hover:text-[#181818]">
-              <X className="w-5 h-5" />
+              {theme === "dark" ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <button
-              onClick={newChat}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium hover:bg-[#f2f2f2] transition-colors"
-            >
-              <Plus className="w-4 h-4" /> New chat
-            </button>
+            <div className="flex items-center justify-between px-2">
+              <button
+                onClick={newChat}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: hoverBg,
+                  color: textPrimary,
+                  border: `1px solid ${borderColor}`,
+                }}
+              >
+                <Plus className="w-4 h-4" style={{ color: textPrimary }} /> New chat
+              </button>
+            </div>
             <div className="space-y-1">
-              {chats.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { openChat(c.id); setSidebar(false); }}
-                  className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
-                    c.id === chatId ? "bg-[#f2f2f2] text-[#181818]" : "text-[#666] hover:bg-[#f2f2f2]"
-                  }`}
-                >
-                  <p className="truncate text-sm">{c.title}</p>
-                </button>
-              ))}
+              {chats.map((c) => {
+                const isRenaming = renamingId === c.id;
+                if (isRenaming) {
+                  return (
+                    <div key={c.id} className="relative">
+                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#3b82f6]">
+                        <input
+                          autoFocus
+                          defaultValue={c.title}
+                          className="flex-1 text-sm font-medium border-none outline-none bg-transparent"
+                          value={renameTitle}
+                          onChange={(e) => setRenameTitle(e.target.value)}
+                          onBlur={() => renameChat(c.id, renameTitle || c.title)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") renameChat(c.id, renameTitle || c.title);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          style={{ color: textPrimary }}
+                        />
+                        <button
+                          onClick={() => setRenamingId(null)}
+                          className="p-1 transition-colors"
+                          style={{ color: textSecondary }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={c.id} className="relative">
+                    <button
+                      onClick={() => openChat(c.id)}
+                      onDoubleClick={() => {
+                        setRenamingId(c.id);
+                        setRenameTitle(c.title);
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        deleteChat(c.id);
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                        c.id === chatId
+                          ? `bg-[#3b82f6] text-white`
+                          : `bg-transparent hover:bg-[${hoverBg}]`
+                      }`}
+                      style={{
+                        color: c.id === chatId ? "white" : textPrimary,
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium" style={{ color: textPrimary }}>
+                          {c.title}
+                        </p>
+                        <p className="truncate text-[10px] mt-0.5" style={{ color: textSecondary }}>
+                          {new Date(c.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingId(c.id);
+                            setRenameTitle(c.title);
+                          }}
+                          className="p-1 transition-colors"
+                          style={{ color: textSecondary }}
+                          aria-label="Rename"
+                        >
+                          <span className="w-3 h-3" style={{ color: textSecondary }}>
+                            ✎
+                          </span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteChat(c.id);
+                          }}
+                          className="p-1 transition-colors"
+                          style={{ color: textSecondary }}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="w-3 h-3" style={{ color: textSecondary }} />
+                        </button>
+                      </div>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </aside>
-      )}
 
-      {/* Main */}
-      <main className="flex-1 flex flex-col relative min-w-0">
-        <header className="h-16 border-b border-[#e5e5e5] bg-white/80 backdrop-blur flex items-center justify-between px-4 sm:px-6 shrink-0 z-10">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <button className="lg:hidden p-2 text-[#666] hover:text-[#181818] mr-2" onClick={() => setSidebar(!sidebar)}>
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="flex flex-col min-w-0">
-              <p className="text-sm font-semibold truncate">{project?.topic || "Start a new manuscript"}</p>
-              <p className="text-[11px] text-[#666] truncate">
-                {busy ? "Writing in progress…" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Long-form research writing agent"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => setSettingsOpen(!settingsOpen)}
-              className="p-2 rounded-full text-[#666] hover:bg-[#f2f2f2] hover:text-[#181818] transition-colors"
-              aria-label="Settings"
-            >
-              <EllipsisVertical className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleSignout}
-              className="p-2 rounded-full text-[#666] hover:bg-[#fef2f2] hover:text-[#ef4444] transition-colors"
-              aria-label="Sign out"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
-
-        {/* Chat area */}
-        <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          <div className="mx-auto max-w-3xl w-full">
-            {!messages.length && !busy ? (
-              <EmptyState onPick={(t) => submit(undefined, t)} />
-            ) : (
-              <div className="space-y-6">
-                {messages.map((m) => (
-                  <article key={m.id} className="flex gap-3 sm:gap-4">
-                    {m.role === "user" ? (
-                      <>
-                        <div className="hidden sm:block w-7 h-7 rounded-full bg-[#f2f2f2] flex items-center justify-center shrink-0">
-                          <span className="text-[9px] text-[#666]">U</span>
-                        </div>
-                        <div className="ml-auto max-w-[90%] sm:max-w-[85%]">
-                          <div className="rounded-2xl rounded-bl-none bg-[#f2f2f2] p-3 sm:p-4 text-sm sm:text-base leading-relaxed text-[#181818] whitespace-pre-wrap break-words">
-                            {m.content}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-7 h-7 rounded-full bg-[#181818] flex items-center justify-center shrink-0 sm:w-8 sm:h-8">
-                          <span className="text-[9px] sm:text-[10px] font-bold text-white">Q</span>
-                        </div>
-                        <div className="max-w-[92%] sm:max-w-[90%]">
-                          {m.kind !== "plan" ? (
-                            <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-3 sm:p-4">
-                              <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} />
-                              {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
-                                <span className="animate-pulse inline-block w-1 h-[1em] bg-[#181818] ml-0.5" />
-                              )}
-                            </div>
-                          ) : null}
-                          {extraFor(m)}
-                        </div>
-                      </>
-                    )}
-                  </article>
-                ))}
-                {project && busy ? (
-                  <article className="flex gap-3 sm:gap-4">
-                    <div className="w-7 h-7 rounded-full bg-[#181818] flex items-center justify-center shrink-0 sm:w-8 sm:h-8">
-                      <span className="text-[9px] sm:text-[10px] font-bold text-white">Q</span>
-                    </div>
-                    <div className="max-w-[92%] sm:max-w-[90%]">
-                      <div className="rounded-2xl rounded-br-none border border-[#e5e5e5] bg-white p-3 sm:p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Loader2 className="w-3 h-3 animate-spin text-[#181818]" />
-                          <span className="text-xs sm:text-sm font-medium text-[#181818]">
-                            {project.steps.find((s) => s.status === "running")?.label || "Writing in progress…"}
-                          </span>
-                        </div>
-                        <div className="w-full bg-[#f2f2f2] rounded-full h-1.5 mb-3">
-                          <div
-                            className="bg-[#181818] h-1.5 rounded-full transition-all duration-500"
-                            style={{ width: `${Math.round(((project.steps.filter((s) => s.status === "done").length) / Math.max(project.steps.length, 1)) * 100)}%` }}
-                          />
-                        </div>
-                        <ol className="grid gap-2 sm:grid-cols-2 text-[10px] sm:text-xs">
-                          {project.steps.map((s) => {
-                            const isDone = s.status === "done";
-                            const isRunning = s.status === "running";
-                            const liClass = `flex items-center gap-2 px-2 py-1.5 rounded-lg border ${isRunning ? "border-[#d6b36a] bg-[#fdf6e3]" : isDone ? "bg-[#f2f2f2]" : "border-transparent bg-transparent"}`;
-                            const dotClass = `h-2 w-2 rounded-full shrink-0 ${isDone ? "bg-[#181818]" : isRunning ? "bg-[#d6b36a]" : "bg-[#e5e5e5]"}`;
-                            const labelClass = `text-xs font-medium ${isDone ? "text-[#181818]" : isRunning ? "text-[#92400e]" : "text-[#888]"}`;
-                            return (
-                              <li key={s.id} className={liClass}>
-                                <span className={dotClass} />
-                                <span className={labelClass}>{s.label}</span>
-                                {isDone && <ChevronRight className="w-3 h-3 ml-auto text-[#ccc]" />}
-                              </li>
-                            );
-                          })}
-                        </ol>
-                        <CommandCard commands={project.commands} />
-                      </div>
-                    </div>
-                  </article>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Settings panel */}
-        {settingsOpen && (
-          <div className="absolute inset-0 z-50 bg-[#fafafa] flex flex-col">
-            <div className="h-16 border-b border-[#e5e5e5] flex items-center justify-between px-4 sm:px-6">
-              <button onClick={() => setSettingsOpen(false)} className="text-[#666] hover:text-[#181818]">
-                Back
+        {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
+          <div
+            className="lg:hidden fixed inset-0 z-30"
+            style={{ backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+            onClick={() => setSidebar(false)}
+          />
+        )}
+        {sidebar && typeof window !== "undefined" && window.innerWidth < 768 && (
+          <aside className="lg:hidden fixed left-0 top-0 z-40 w-[85vw] max-w-md h-full shadow-xl transform transition-transform duration-300 flex flex-col" style={{ backgroundColor: sidebarBg }}>
+            <div className="h-12 flex items-center justify-between px-4 border-b shrink-0" style={{ borderColor }}>
+              <span className="font-semibold text-sm" style={{ color: textPrimary }}>
+                Chats
+              </span>
+              <button onClick={() => setSidebar(false)} className="transition-colors" style={{ color: textSecondary }}>
+                <X className="w-5 h-5" />
               </button>
-              <span className="text-sm font-semibold">Settings</span>
-              <div className="w-8" />
             </div>
-            <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Document type</p>
-                <SelectField
-                  label="Type"
-                  value={documentType}
-                  onChange={(v) => setDocumentType(v as DocumentType)}
-                  options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Citation style</p>
-                <SelectField
-                  label="Style"
-                  value={citationStyle}
-                  onChange={(v) => setCitationStyle(v as CitationStyle)}
-                  options={CITATION_STYLES}
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Target pages</p>
-                <SelectField
-                  label="Pages"
-                  value={targetPages}
-                  onChange={setTargetPages}
-                  options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Author</p>
-                <input
-                  value={authorName}
-                  onChange={(e) => setAuthorName(e.target.value)}
-                  placeholder="Author name"
-                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#181818] outline-none"
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Institution</p>
-                <input
-                  value={institution}
-                  onChange={(e) => setInstitution(e.target.value)}
-                  placeholder="Institution / university"
-                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#181818] outline-none"
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">Mode</p>
-                <div className="grid grid-cols-2 gap-2">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <button
+                onClick={newChat}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: hoverBg,
+                  color: textPrimary,
+                  border: `1px solid ${borderColor}`,
+                }}
+              >
+                <Plus className="w-4 h-4" style={{ color: textPrimary }} /> New chat
+              </button>
+              <div className="space-y-1">
+                {chats.map((c) => (
                   <button
-                    onClick={() => setMode("write")}
-                    className={`rounded-lg py-2 text-sm font-medium transition-colors ${
-                      mode === "write" ? "bg-[#181818] text-white" : "bg-white border border-[#e5e5e5] text-[#666] hover:bg-[#f2f2f2]"
+                    key={c.id}
+                    onClick={() => {
+                      openChat(c.id);
+                      setSidebar(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                      c.id === chatId ? `bg-[#3b82f6] text-white` : `bg-transparent hover:bg-[${hoverBg}]`
                     }`}
+                    style={{
+                      color: c.id === chatId ? "white" : textPrimary,
+                    }}
                   >
-                    Write
+                    <p className="truncate text-sm" style={{ color: textPrimary }}>
+                      {c.title}
+                    </p>
                   </button>
-                  <button
-                    onClick={() => setMode("research")}
-                    className={`rounded-lg py-2 text-sm font-medium transition-colors ${
-                      mode === "research" ? "bg-[#181818] text-white" : "bg-white border border-[#e5e5e5] text-[#666] hover:bg-[#f2f2f2]"
-                    }`}
-                  >
-                    Journals
-                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        <main className="flex-1 flex flex-col relative min-w-0">
+          <header className="h-16 border-b flex items-center justify-between px-4 sm:px-6 shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <button className="lg:hidden p-2 mr-2 transition-colors" onClick={() => setSidebar(!sidebar)} style={{ color: textSecondary }}>
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex flex-col min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: textPrimary }}>
+                  {project?.topic || "Start a new manuscript"}
+                </p>
+                <p className="text-[11px] truncate" style={{ color: textSecondary }}>
+                  {busy ? "Writing in progress…" : project?.status === "complete" ? `${project.pageEstimate} pages ready` : "Long-form research writing agent"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setSettingsOpen(!settingsOpen)}
+                className="p-2 rounded-full transition-colors"
+                aria-label="Settings"
+                style={{
+                  backgroundColor: hoverBg,
+                  color: textPrimary,
+                }}
+              >
+                <EllipsisVertical className="w-5 h-5" style={{ color: textPrimary }} />
+              </button>
+              <button
+                onClick={handleSignout}
+                className="p-2 rounded-full transition-colors hover:bg-[#ef4444] hover:text-white"
+                aria-label="Sign out"
+                style={{ color: textPrimary }}
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </header>
+
+          <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+            <div className="mx-auto max-w-3xl w-full">
+              {!messages.length && !busy ? (
+                <EmptyState isDark={isDark} onPick={(t) => submit(undefined, t)} />
+              ) : (
+                <div className="space-y-6">
+                  {messages.map((m) => (
+                    <article key={m.id} className="flex gap-3 sm:gap-4">
+                      {m.role === "user" ? (
+                        <>
+                          <div className="hidden sm:block w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: borderColor }}>
+                            <span className="text-[9px]" style={{ color: textSecondary }}>
+                              U
+                            </span>
+                          </div>
+                          <div className="ml-auto max-w-[90%] sm:max-w-[85%]">
+                            <div className="rounded-2xl rounded-bl-none p-3 sm:p-4 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words" style={{ backgroundColor: "#3b82f6", color: "#ffffff" }}>
+                              {m.content}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 sm:w-8 sm:h-8" style={{ backgroundColor: textPrimary }}>
+                            <span className="text-[9px] sm:text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>
+                              Q
+                            </span>
+                          </div>
+                          <div className="max-w-[92%] sm:max-w-[90%]">
+                            {m.kind !== "plan" ? (
+                              <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                                <MarkdownText text={typingMessageId === m.id ? m.content.slice(0, typingChars) : m.content} />
+                                {!typingMessageId || typingMessageId !== m.id || typingChars >= m.content.length ? null : (
+                                  <span className="animate-pulse inline-block w-1 h-[1em]" style={{ backgroundColor: textPrimary }} />
+                                )}
+                              </div>
+                            ) : null}
+                            {extraFor(m, isDark)}
+                          </div>
+                        </>
+                      )}
+                    </article>
+                  ))}
+                  {project && busy ? (
+                    <article className="flex gap-3 sm:gap-4">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 sm:w-8 sm:h-8" style={{ backgroundColor: textPrimary }}>
+                        <span className="text-[9px] sm:text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>
+                          Q
+                        </span>
+                      </div>
+                      <div className="max-w-[92%] sm:max-w-[90%]">
+                        <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Loader2 className="w-3 h-3 animate-spin" style={{ color: textPrimary }} />
+                            <span className="text-xs sm:text-sm font-medium" style={{ color: textPrimary }}>
+                              {project.steps.find((s) => s.status === "running")?.label || "Writing in progress…"}
+                            </span>
+                          </div>
+                          <div className="w-full rounded-full h-1.5 mb-3" style={{ backgroundColor: borderColor }}>
+                            <div
+                              className="h-1.5 rounded-full transition-all duration-500"
+                              style={{
+                                backgroundColor: textPrimary,
+                                width: `${Math.round(((project.steps.filter((s) => s.status === "done").length) / Math.max(project.steps.length, 1)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <ol className="grid gap-2 sm:grid-cols-2 text-[10px] sm:text-xs">
+                            {project.steps.map((s) => {
+                              const isDone = s.status === "done";
+                              const isRunning = s.status === "running";
+                              return (
+                                <li
+                                  key={s.id}
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-colors"
+                                  style={{
+                                    backgroundColor: isDone ? hoverBg : "transparent",
+                                    borderColor: isRunning ? "#d6b36a" : "transparent",
+                                  }}
+                                >
+                                  <span
+                                    className="h-2 w-2 rounded-full shrink-0"
+                                    style={{
+                                      backgroundColor: isDone ? "#181818" : isRunning ? "#d6b36a" : "#2a2a2a",
+                                    }}
+                                  />
+                                  <span
+                                    className="text-xs font-medium"
+                                    style={{
+                                      color: isDone ? textPrimary : isRunning ? "#92400e" : textSecondary,
+                                    }}
+                                  >
+                                    {s.label}
+                                  </span>
+                                  {isDone && (
+                                    <ChevronRight className="w-3 h-3 ml-auto" style={{ color: borderColor }} />
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ol>
+                          <CommandCard commands={project.commands} isDark={isDark} />
+                        </div>
+                      </div>
+                    </article>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {settingsOpen && (
+            <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: bg }}>
+              <div className="h-16 border-b flex items-center justify-between px-4 sm:px-6" style={{ borderColor }}>
+                <button onClick={() => setSettingsOpen(false)} className="transition-colors" style={{ color: textSecondary }}>
+                  Back
+                </button>
+                <span className="text-sm font-semibold" style={{ color: textPrimary }}>
+                  Settings
+                </span>
+                <div className="w-8" />
+              </div>
+              <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Appearance
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["light", "dark", "system"].map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          setTheme(t as "light" | "dark" | "system");
+                          localStorage.setItem("quill_theme", t);
+                        }}
+                        className="rounded-lg py-2 text-sm font-medium transition-colors"
+                        style={{
+                          color: theme === t ? "white" : textPrimary,
+                          backgroundColor: theme === t ? "#3b82f6" : "transparent",
+                          border: `1px solid ${borderColor}`,
+                        }}
+                      >
+                        {t === "light" ? "Light" : t === "dark" ? "Dark" : "System"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Document type
+                  </p>
+                  <SelectField
+                    label="Type"
+                    value={documentType}
+                    onChange={(v) => setDocumentType(v as DocumentType)}
+                    options={DOCUMENT_TYPES.map((d) => ({ value: d.value, label: d.label }))}
+                    isDark={isDark}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Citation style
+                  </p>
+                  <SelectField
+                    label="Style"
+                    value={citationStyle}
+                    onChange={(v) => setCitationStyle(v as CitationStyle)}
+                    options={CITATION_STYLES}
+                    isDark={isDark}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Target pages
+                  </p>
+                  <SelectField
+                    label="Pages"
+                    value={targetPages}
+                    onChange={setTargetPages}
+                    options={PAGE_OPTIONS.map((n) => ({ value: String(n), label: `${n}+ pages` }))}
+                    isDark={isDark}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Author
+                  </p>
+                  <input
+                    value={authorName}
+                    onChange={(e) => setAuthorName(e.target.value)}
+                    placeholder="Author name"
+                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6]"
+                    style={{
+                      backgroundColor: inputBg,
+                      borderColor,
+                      color: textPrimary,
+                    }}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Institution
+                  </p>
+                  <input
+                    value={institution}
+                    onChange={(e) => setInstitution(e.target.value)}
+                    placeholder="Institution / university"
+                    className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6]"
+                    style={{
+                      backgroundColor: inputBg,
+                      borderColor,
+                      color: textPrimary,
+                    }}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: textSecondary }}>
+                    Mode
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setMode("write")}
+                      className="rounded-lg py-2 text-sm font-medium transition-colors"
+                      style={{
+                        color: mode === "write" ? "white" : textPrimary,
+                        backgroundColor: mode === "write" ? "#3b82f6" : "transparent",
+                        border: `1px solid ${borderColor}`,
+                      }}
+                    >
+                      Write
+                    </button>
+                    <button
+                      onClick={() => setMode("research")}
+                      className="rounded-lg py-2 text-sm font-medium transition-colors"
+                      style={{
+                        color: mode === "research" ? "white" : textPrimary,
+                        backgroundColor: mode === "research" ? "#3b82f6" : "transparent",
+                        border: `1px solid ${borderColor}`,
+                      }}
+                    >
+                      Journals
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )})
 
-        {/* Composer */}
-        <footer className="h-auto p-4 sm:p-6 border-t border-[#e5e5e5] bg-white shrink-0 z-10">
-          <div className="mx-auto max-w-3xl w-full">
-            <div className="flex items-end gap-3">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={1}
-                onInput={(e) => {
-                  const el = e.target as HTMLTextAreaElement;
-                  el.style.height = "auto";
-                  el.style.height = `${el.scrollHeight}px`;
-                }}
-                placeholder="Message Quill…"
-                className="flex-1 resize-none rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-4 py-3 text-sm text-[#181818] outline-none focus:ring-2 focus:ring-[#181818] min-h-[48px] max-h-[160px]"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-              />
-              <button
-                disabled={busy || !prompt.trim()}
-                onClick={submit}
-                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                  busy || !prompt.trim()
-                    ? "bg-[#e5e5e5] text-[#999]"
-                    : "bg-[#181818] text-white hover:bg-[#333]"
-                }`}
-                aria-label="Send"
-              >
-                {busy ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </button>
+          <footer className="h-auto p-4 sm:p-6 border-t shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
+            <div className="mx-auto max-w-3xl w-full">
+              <div className="flex items-end gap-3">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={1}
+                  onInput={(e) => {
+                    const el = e.target as HTMLTextAreaElement;
+                    el.style.height = "auto";
+                    el.style.height = `${el.scrollHeight}px`;
+                  }}
+                  placeholder="Message Quill…"
+                  className="flex-1 resize-none rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#3b82f6] min-h-[48px] max-h-[160px]"
+                  style={{
+                    backgroundColor: inputBg,
+                    borderColor,
+                    color: textPrimary,
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                />
+                <button
+                  disabled={busy || !prompt.trim()}
+                  onClick={submit}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                  style={{
+                    backgroundColor: busy || !prompt.trim() ? "#2a2a2a" : "#181818",
+                    color: busy || !prompt.trim() ? "#888888" : "white",
+                  }}
+                  aria-label="Send"
+                >
+                  {busy ? (
+                    <Loader2 className="w-5 h-5 animate-spin" style={{ color: "white" }} />
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        </footer>
-      </main>
-    </div>
+          </footer>
+        </main>
+      </div>
+    </>
   );
 }
 
-function EmptyState({ onPick }: { onPick: (topic: string) => void }) {
+function EmptyState({ isDark, onPick }: { isDark: boolean; onPick: (topic: string) => void }) {
   const samples = [
     "The role of large language models in academic research integrity",
     "Renewable microgrids for rural electrification in sub-Saharan Africa",
     "Antimicrobial resistance surveillance using wastewater epidemiology",
     "Digital public infrastructure and financial inclusion in emerging markets",
   ];
+  const cardBg = isDark ? "#161616" : "#ffffff";
+  const textPrimary = isDark ? "#ffffff" : "#181818";
+  const textSecondary = isDark ? "#a1a1aa" : "#666666";
+  const borderColor = isDark ? "#2a2a2a" : "#e5e5e5";
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6 sm:p-12">
-      <div className="w-16 h-16 rounded-full bg-[#f2f2f2] flex items-center justify-center mb-4 sm:mb-6">
-        <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-[#181818]" />
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 sm:mb-6" style={{ backgroundColor: borderColor }}>
+        <Sparkles className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: textPrimary }} />
       </div>
-      <h1 className="text-2xl sm:text-3xl font-semibold text-[#181818] mb-2">Quill</h1>
-      <p className="text-[#666] mb-6 sm:mb-8 max-w-md sm:max-w-lg px-4 sm:px-0">
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-2" style={{ color: textPrimary }}>
+        Quill
+      </h1>
+      <p className="mb-6 sm:mb-8 max-w-md sm:max-w-lg px-4 sm:px-0" style={{ color: textSecondary }}>
         Write 20–150 page theses, projects, and literature reviews with live journal harvest, consistent structure, and PDF/DOCX export.
       </p>
       <div className="space-y-3 w-full max-w-md sm:max-w-lg px-4 sm:px-0">
@@ -556,9 +826,14 @@ function EmptyState({ onPick }: { onPick: (topic: string) => void }) {
           <button
             key={s}
             onClick={() => onPick(s)}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#e5e5e5] bg-white text-left text-sm text-[#181818] hover:bg-[#f2f2f2] transition-colors"
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-left text-sm transition-colors"
+            style={{
+              backgroundColor: cardBg,
+              border: `1px solid ${borderColor}`,
+              color: textPrimary,
+            }}
           >
-            <span className="flex items-center gap-2 text-[#666]">
+            <span className="flex items-center gap-2" style={{ color: textSecondary }}>
               <BookMarked className="w-4 h-4" /> {s}
             </span>
           </button>

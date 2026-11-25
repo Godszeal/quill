@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getChat, getProjectByChat, listMessages, usingMongo } from "@/lib/db";
+import { deleteChat, getChat, getProjectByChat, listMessages, upsertChat, usingMongo } from "@/lib/db";
 import { mcpConfigured } from "@/lib/mcp";
 import { requireAuth } from "@/lib/auth-api";
 
@@ -22,4 +22,40 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     project,
     env: { mongo: usingMongo(), mcp: mcpConfigured() },
   });
+}
+
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAuth(req.headers);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  const chat = await getChat(params.id);
+  if (!chat) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if ((chat as any).userId && (chat as any).userId !== auth.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const { title } = await req.json();
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return NextResponse.json({ error: "Title required" }, { status: 400 });
+  }
+  await upsertChat({
+    ...chat,
+    title: title.trim(),
+    updatedAt: new Date().toISOString(),
+  });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const auth = await requireAuth(req.headers);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  const chat = await getChat(params.id);
+  if (!chat) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if ((chat as any).userId && (chat as any).userId !== auth.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  await deleteChat(params.id);
+  return NextResponse.json({ ok: true });
 }

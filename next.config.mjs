@@ -4,7 +4,6 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["pdfkit", "docx"],
   },
-  transpilePackages: ["mongodb"],
 };
 
 export default nextConfig;

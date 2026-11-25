@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createUser, findUserByEmail, verifyPassword, createSession } from "@/lib/auth";
+import { verifyPassword, createSession } from "@/lib/auth";
+import { createUser, findUserByEmail as findUser } from "@/lib/auth-db";
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
     }
-    const existing = await findUserByEmail(email);
+    const existing = await findUser(email);
     if (existing) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }

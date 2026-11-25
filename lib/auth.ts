@@ -1,15 +1,45 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
-import type { Chat } from "@/lib/types";
 
 const SESSION_NAME = "quill_session";
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+const JWT_SECRET = process.env.AUTH_SECRET || "quill-dev-secret-change-me";
 
 export type SessionUser = {
   id: string;
   email: string;
   name: string;
 };
+
+function base64Url(buf: Buffer): string {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function signJwt(payload: object): string {
+  const header = base64Url(Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })));
+  const body = base64Url(Buffer.from(JSON.stringify(payload)));
+  const signingInput = `${header}.${body}`;
+  const sig = createHash("sha256").update(signingInput + "." + JWT_SECRET).digest();
+  return `${signingInput}.${base64Url(sig)}`;
+}
+
+function verifyJwt(token: string): { user: SessionUser; exp: number } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const [headerB64, bodyB64, sigB64] = parts;
+    const signingInput = `${headerB64}.${bodyB64}`;
+    const expected = createHash("sha256").update(signingInput + "." + JWT_SECRET).digest();
+    const expectedB64 = base64Url(expected);
+    if (!timingSafeEqual(Buffer.from(sigB64, "base64"), Buffer.from(expectedB64, "base64"))) return null;
+    const body = JSON.parse(Buffer.from(bodyB64, "base64").toString("utf8"));
+    if (!body.user || typeof body.exp !== "number") return null;
+    if (Date.now() > body.exp * 1000) return null;
+    return { user: body.user as SessionUser, exp: body.exp };
+  } catch {
+    return null;
+  }
+}
 
 function hashPassword(password: string, salt?: string) {
   const s = salt || randomBytes(16).toString("hex");
@@ -52,62 +82,19 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const store = cookies();
     const token = store.get(SESSION_NAME)?.value;
     if (!token) return null;
-    const db = await connectAuthDb();
-    if (!db) return null;
-    const row = await db.collection("sessions").findOne({ token, expiresAt: { $gt: new Date() } });
-    if (!row) return null;
-    return row.user as unknown as SessionUser;
+    const decoded = verifyJwt(token);
+    if (!decoded) return null;
+    return decoded.user;
   } catch {
     return null;
   }
 }
 
-export async function createSession(user: SessionUser) {
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE * 1000);
-  const db = await connectAuthDb();
-  if (!db) throw new Error("Auth database unavailable");
-  await db.collection("sessions").deleteMany({ "user.id": user.id });
-  await db.collection("sessions").insertOne({ token, user, expiresAt, createdAt: new Date() });
+export async function createSession(user: SessionUser): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE;
+  const token = signJwt({ user, exp });
   setSessionCookie(token);
   return token;
-}
-
-let _authDb: any = null;
-async function connectAuthDb() {
-  if (_authDb) return _authDb;
-  const { connectMongo } = await import("./db");
-  const { MongoClient, Db } = await import("mongodb");
-  const uri = process.env.MONGODB_URI || "";
-  if (!uri) return null;
-  try {
-    const client = new MongoClient(uri);
-    await client.connect();
-    const db = client.db(process.env.MONGODB_DB || "quill");
-    await db.collection("sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-    await db.collection("users").createIndex({ email: 1 }, { unique: true });
-    _authDb = db;
-    return db;
-  } catch {
-    return null;
-  }
-}
-
-export async function findUserByEmail(email: string) {
-  const db = await connectAuthDb();
-  if (!db) return null;
-  return db.collection("users").findOne({ email });
-}
-
-export async function createUser(email: string, password: string, name: string) {
-  const db = await connectAuthDb();
-  if (!db) throw new Error("Auth database unavailable");
-  const existing = await db.collection("users").findOne({ email });
-  if (existing) throw new Error("Email already registered");
-  const { salt, hash } = hashPassword(password);
-  const id = `user_${randomBytes(8).toString("hex")}`;
-  await db.collection("users").insertOne({ id, email, name, salt, hash, createdAt: new Date() });
-  return { id, email, name };
 }
 
 export async function requireAuth(headers: Headers) {
@@ -115,11 +102,9 @@ export async function requireAuth(headers: Headers) {
   const match = cookie.match(new RegExp(`(?:^|; )${SESSION_NAME}=([^;]+)`));
   if (!match) return { error: "Unauthorized", status: 401 };
   const token = match[1];
-  const db = await connectAuthDb();
-  if (!db) return { error: "Auth unavailable", status: 503 };
-  const row = await db.collection("sessions").findOne({ token, expiresAt: { $gt: new Date() } });
-  if (!row) return { error: "Session expired", status: 401 };
-  return { user: row.user as unknown as SessionUser };
+  const decoded = verifyJwt(token);
+  if (!decoded) return { error: "Session expired", status: 401 };
+  return { user: decoded.user };
 }
 
 export async function ensureChatOwnership(chatId: string, userId: string) {
@@ -131,3 +116,5 @@ export async function ensureChatOwnership(chatId: string, userId: string) {
   }
   return { chat };
 }
+
+export { hashPassword };

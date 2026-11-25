@@ -1,4 +1,4 @@
-import type { ChatMessage, ChapterBlockLevel, CommandEvent, PipelineStep, Project, ProjectFile } from "./types";
+import type { ChatMessage, CommandEvent, PipelineStep, Project, ProjectFile } from "./types";
 import { nid, nowIso } from "./ids";
 import { harvestSources } from "./research";
 import {
@@ -7,7 +7,6 @@ import {
   buildOutline,
   pageEstimateOf,
   wordCountOf,
-  writeChapter,
 } from "./writer";
 import { buildPdf } from "./export/pdf";
 import { buildDocx } from "./export/docx";
@@ -89,9 +88,19 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
   };
 
   try {
+    if (!llmConfigured()) {
+      throw new Error(
+        "USER_LLM_API_KEY is not configured. Set it in Vercel env (NVIDIA integrate.api.nvidia.com) so chapters are written by the real model."
+      );
+    }
+
     project.status = "researching";
     setStep(project, "intake", "running");
-    command(project, "quill intake --normalize", `topic=${project.topic}; type=${project.documentType}; pages=${project.targetPages}; style=${project.citationStyle}`);
+    command(
+      project,
+      "quill intake --normalize",
+      `topic=${project.topic}; type=${project.documentType}; pages=${project.targetPages}; style=${project.citationStyle}`
+    );
     await say(project.chatId, {
       role: "assistant",
       kind: "plan",
@@ -153,48 +162,54 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
         `quill write --chapter ${outline[i].number} --pages ${outline[i].targetPages}`,
         `Composing ${outline[i].title}`
       );
-      let chapterText: string | null = null;
-      if (llmConfigured()) {
-        try {
-          const usedSources = sources.filter((s) => outline[i].sourceIds.includes(s.id));
-          chapterText = await llmWriteChapter({
-            topic: project.topic,
-            section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
-            sources: usedSources.map((s) => ({
-              title: s.title,
-              year: s.year,
-              authors: s.authors,
-              venue: s.venue,
-              doi: s.doi,
-              abstract: s.abstract,
-            })),
-            style: project.citationStyle,
-            documentType: project.documentType,
-            targetWords: outline[i].targetPages * 280,
-          });
-        } catch (error) {
-          command(project, `quill llm --chapter ${outline[i].number}`, String(error instanceof Error ? error.message : "LLM failed"), "error");
-        }
+
+      const usedSources = sources.filter((s) => outline[i].sourceIds.includes(s.id));
+      const chapterText = await llmWriteChapter({
+        topic: project.topic,
+        section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
+        sources: usedSources.map((s) => ({
+          title: s.title,
+          year: s.year,
+          authors: s.authors,
+          venue: s.venue,
+          doi: s.doi,
+          abstract: s.abstract,
+        })),
+        style: project.citationStyle,
+        documentType: project.documentType,
+        targetWords: outline[i].targetPages * 280,
+      });
+
+      if (!chapterText?.trim()) {
+        throw new Error(`LLM returned empty content for chapter ${outline[i].number}: ${outline[i].title}`);
       }
-      const chapter = chapterText
-        ? {
-            ...writeChapter(project.topic, outline[i], sources, project.citationStyle, project.documentType),
-            blocks: [
-              { heading: outline[i].title, level: 1 as ChapterBlockLevel, paragraphs: [chapterText] },
-            ],
-            wordCount: chapterText.split(/\s+/).filter(Boolean).length,
-            pageEstimate: Math.max(1, Math.round(chapterText.split(/\s+/).filter(Boolean).length / 280)),
-          }
-        : writeChapter(project.topic, outline[i], sources, project.citationStyle, project.documentType);
-      project.chapters[i] = chapter;
+
+      const wordCount = chapterText.split(/\s+/).filter(Boolean).length;
+      const pageEstimate = Math.max(1, Math.round(wordCount / 280));
+      project.chapters[i] = {
+        id: outline[i].id,
+        number: outline[i].number,
+        title: outline[i].title,
+        summary: outline[i].summary,
+        blocks: [{ heading: outline[i].title, level: 1, paragraphs: [chapterText] }],
+        wordCount,
+        pageEstimate,
+        sourceIds: usedSources.map((s) => s.id),
+        status: "done",
+      };
       project.wordCount = wordCountOf(project.chapters.filter((c) => c.status === "done"));
       project.pageEstimate = pageEstimateOf(project.chapters.filter((c) => c.status === "done"));
       const progress = await say(project.chatId, {
         role: "assistant",
         kind: "progress",
-        content: `Chapter ${chapter.number} complete: ${chapter.title} (${chapter.wordCount.toLocaleString()} words, ~${chapter.pageEstimate} pages).`,
+        content: `Chapter ${outline[i].number} complete: ${outline[i].title} (${wordCount.toLocaleString()} words, ~${pageEstimate} pages).`,
         meta: {
-          chapter: { number: chapter.number, title: chapter.title, wordCount: chapter.wordCount, pageEstimate: chapter.pageEstimate },
+          chapter: {
+            number: outline[i].number,
+            title: outline[i].title,
+            wordCount,
+            pageEstimate,
+          },
           done: i + 1,
           total: outline.length,
           wordCount: project.wordCount,

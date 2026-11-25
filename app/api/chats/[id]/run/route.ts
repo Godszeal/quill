@@ -16,6 +16,7 @@ type Body = {
   targetPages?: number;
   authorName?: string;
   institution?: string;
+  /** Optional. When "write" or omitted, server still infers so greetings stay chat. */
   mode?: "write" | "research" | "chat";
 };
 
@@ -50,7 +51,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       updatedAt: nowIso(),
     });
 
-    const mode = body.mode || inferMode(prompt);
+    // Always prefer inference for short greetings even if the UI sends mode=write.
+    const inferred = inferMode(prompt);
+    const mode =
+      body.mode === "research" || body.mode === "chat"
+        ? body.mode
+        : inferred;
+
     if (mode === "research") {
       const sources = await harvestSources(prompt, 24);
       await addMessage(params.id, {
@@ -124,11 +131,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 }
 
-function inferMode(prompt: string): Body["mode"] {
+function inferMode(prompt: string): NonNullable<Body["mode"]> {
   const q = prompt.toLowerCase().trim();
-  if (/^(help|hi|hello|hey|what can you do|how does this work|who are you|what is quill)\b/.test(q)) return "chat";
-  if (q.length <= 40 && /^(ai|llm|chat|talk|converse|assistant|agent|you|your)\b/.test(q)) return "chat";
-  if (/\b(find|search|latest journals?|papers? only|harvest)\b/.test(q) && q.length < 180) return "research";
+  if (
+    /^(help|hi|hello|hey|yo|sup|thanks|thank you|ok|okay|cool|great|nice|good morning|good afternoon|good evening)\b/.test(
+      q
+    )
+  )
+    return "chat";
+  if (/^(what can you do|how does this work|who are you|what is quill|how are you)\b/.test(q)) return "chat";
+  if (q.length <= 48 && /^(ai|llm|chat|talk|converse|assistant|agent)\b/.test(q)) return "chat";
+  if (/\b(find|search|latest journals?|papers? only|harvest|sources only)\b/.test(q) && q.length < 180)
+    return "research";
   return "write";
 }
 

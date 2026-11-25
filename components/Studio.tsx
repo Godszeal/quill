@@ -459,7 +459,7 @@ export function Studio() {
                           aria-label="Rename"
                         >
                           <span className="w-3 h-3" style={{ color: textSecondary }}>
-                            ✎
+                            <i className="fa fa-pencil" aria-hidden="true" />
                           </span>
                         </button>
                         <button
@@ -571,7 +571,7 @@ export function Studio() {
                             aria-label="Rename"
                           >
                             <span className="w-3 h-3" style={{ color: textSecondary }}>
-                              ✎
+                              <i className="fa fa-pencil" aria-hidden="true" />
                             </span>
                           </button>
                           <button
@@ -595,8 +595,8 @@ export function Studio() {
           </aside>
         )}
 
-        <main className="flex-1 flex flex-col relative min-w-0" style={{ backgroundColor: bg }}>
-          <header className="h-16 border-b flex items-center justify-between px-4 sm:px-6 shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
+        <main className="flex-1 flex flex-col relative min-w-0 h-full" style={{ backgroundColor: bg }}>
+          <header className="h-16 border-b flex items-center justify-between px-4 sm:px-6 shrink-0 z-20 sticky top-0" style={{ borderColor, backgroundColor: cardBg }}>
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <button className="lg:hidden p-2 mr-2 transition-colors" onClick={() => setSidebar(!sidebar)} style={{ color: textSecondary }}>
                 <Menu className="w-5 h-5" />
@@ -633,7 +633,7 @@ export function Studio() {
             </div>
           </header>
 
-          <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8" style={{ scrollBehavior: "smooth" }}>
+          <div ref={scroller} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8" style={{ scrollBehavior: "smooth", paddingBottom: "110px" }}>
             <div className="mx-auto max-w-3xl w-full">
               {!messages.length && !busy ? (
                 <EmptyState isDark={isDark} onPick={(t) => submit(undefined, t)} />
@@ -744,7 +744,7 @@ export function Studio() {
             </div>
           </div>
 
-          <footer className="h-auto p-4 sm:p-6 border-t shrink-0 z-10" style={{ borderColor, backgroundColor: cardBg }}>
+          <footer className="h-auto p-4 sm:p-6 border-t shrink-0 z-20 sticky bottom-0" style={{ borderColor, backgroundColor: cardBg }}>
             <div className="mx-auto max-w-3xl w-full">
               <div className="flex items-end gap-3">
                 <textarea
@@ -786,7 +786,7 @@ export function Studio() {
                     {stopping ? (
                       <Loader2 className="w-5 h-5 animate-spin" style={{ color: "white" }} />
                     ) : (
-                      <span style={{ fontWeight: "bold", fontSize: "14px" }}>⏹</span>
+                      <i className="fa fa-stop" aria-hidden="true" />
                     )}
                   </button>
                 ) : (

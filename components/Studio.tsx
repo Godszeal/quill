@@ -678,8 +678,31 @@ export function Studio() {
                         </>
                       )}
                     </article>
-                  ))}
-                  {project && busy ? (
+                    ))}
+                    {typingMessageId && typingChars < (messages.find((m) => m.id === typingMessageId)?.content.length || 0) && (
+                      <article className="flex gap-3 sm:gap-4">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 sm:w-8 sm:h-8" style={{ backgroundColor: textPrimary }}>
+                          <span className="text-[9px] sm:text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>
+                            Q
+                          </span>
+                        </div>
+                        <div className="max-w-[92%] sm:max-w-[90%]">
+                          <div className="rounded-2xl rounded-br-none border p-3 sm:p-4" style={{ borderColor, backgroundColor: cardBg }}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm font-medium" style={{ color: textSecondary }}>
+                                Quill is typing…
+                              </span>
+                              <span className="flex gap-1">
+                                <span className="w-1 h-1 rounded-full bg-[#666666] animate-bounce" style={{ animationDelay: "0ms" }} />
+                                <span className="w-1 h-1 rounded-full bg-[#666666] animate-bounce" style={{ animationDelay: "150ms" }} />
+                                <span className="w-1 h-1 rounded-full bg-[#666666] animate-bounce" style={{ animationDelay: "300ms" }} />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    )}
+                    {project && busy ? (
                     <article className="flex gap-3 sm:gap-4">
                       <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 sm:w-8 sm:h-8" style={{ backgroundColor: textPrimary }}>
                         <span className="text-[9px] sm:text-[10px] font-bold" style={{ color: isDark ? "#000000" : "#ffffff" }}>

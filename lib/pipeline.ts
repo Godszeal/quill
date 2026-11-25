@@ -88,12 +88,6 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
   };
 
   try {
-    if (!llmConfigured()) {
-      throw new Error(
-        "USER_LLM_API_KEY is not configured. Set it in Vercel env (NVIDIA integrate.api.nvidia.com) so chapters are written by the real model."
-      );
-    }
-
     project.status = "researching";
     setStep(project, "intake", "running");
     command(
@@ -163,39 +157,46 @@ export async function runPipeline(project: Project, onTick?: (project: Project, 
         `Composing ${outline[i].title}`
       );
 
+      let chapterText: string | null = null;
       const usedSources = sources.filter((s) => outline[i].sourceIds.includes(s.id));
-      const chapterText = await llmWriteChapter({
-        topic: project.topic,
-        section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
-        sources: usedSources.map((s) => ({
-          title: s.title,
-          year: s.year,
-          authors: s.authors,
-          venue: s.venue,
-          doi: s.doi,
-          abstract: s.abstract,
-        })),
-        style: project.citationStyle,
-        documentType: project.documentType,
-        targetWords: outline[i].targetPages * 280,
-      });
-
+      if (llmConfigured()) {
+        try {
+          chapterText = await llmWriteChapter({
+            topic: project.topic,
+            section: { title: outline[i].title, summary: outline[i].summary, number: outline[i].number },
+            sources: usedSources.map((s) => ({
+              title: s.title,
+              year: s.year,
+              authors: s.authors,
+              venue: s.venue,
+              doi: s.doi,
+              abstract: s.abstract,
+            })),
+            style: project.citationStyle,
+            documentType: project.documentType,
+            targetWords: outline[i].targetPages * 280,
+          });
+        } catch (error) {
+          command(project, `quill llm --chapter ${outline[i].number}`, String(error instanceof Error ? error.message : "LLM failed"), "error");
+        }
+      }
       if (!chapterText?.trim()) {
-        throw new Error(`LLM returned empty content for chapter ${outline[i].number}: ${outline[i].title}`);
+        chapterText = null;
       }
 
-      const wordCount = chapterText.split(/\s+/).filter(Boolean).length;
+      const effectiveText = chapterText || "";
+      const wordCount = effectiveText.split(/\s+/).filter(Boolean).length;
       const pageEstimate = Math.max(1, Math.round(wordCount / 280));
       project.chapters[i] = {
         id: outline[i].id,
         number: outline[i].number,
         title: outline[i].title,
         summary: outline[i].summary,
-        blocks: [{ heading: outline[i].title, level: 1, paragraphs: [chapterText] }],
+        blocks: effectiveText ? [{ heading: outline[i].title, level: 1, paragraphs: [effectiveText] }] : [],
         wordCount,
         pageEstimate,
-        sourceIds: usedSources.map((s) => s.id),
-        status: "done",
+        sourceIds: chapterText ? usedSources.map((s) => s.id) : [],
+        status: chapterText ? "done" : "pending",
       };
       project.wordCount = wordCountOf(project.chapters.filter((c) => c.status === "done"));
       project.pageEstimate = pageEstimateOf(project.chapters.filter((c) => c.status === "done"));

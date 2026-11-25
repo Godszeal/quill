@@ -48,5 +48,15 @@ export async function requireAuth(headers: Headers) {
 }
 
 export async function createSession(user: SessionUser): Promise<string> {
-  return createSessionToken(user);
+  const token = createSessionToken(user);
+  const { cookies } = await import("next/headers");
+  const store = cookies();
+  store.set(SESSION_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 30 * 24 * 60 * 60,
+    path: "/",
+  });
+  return token;
 }
